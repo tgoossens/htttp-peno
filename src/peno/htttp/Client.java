@@ -1,14 +1,22 @@
 package peno.htttp;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.Consumer;
+import com.rabbitmq.client.DefaultConsumer;
+import com.rabbitmq.client.Envelope;
+import com.rabbitmq.tools.json.JSONReader;
 import com.rabbitmq.tools.json.JSONWriter;
 
 /**
@@ -24,6 +32,8 @@ public class Client {
 	private final String playerID;
 
 	private boolean isHost;
+	private final Set<String> participants = Collections
+			.synchronizedSet(new HashSet<String>());
 
 	public Client(ConnectionFactory connectionFactory, Handler handler,
 			String gameID, String playerID) throws IOException {
@@ -89,7 +99,34 @@ public class Client {
 			// Exchange does not exist
 			channel.exchangeDeclare(getGameID(), "topic");
 			isHost = true;
-			// Create host handler...
+			// Setup host
+			setupHost();
+		}
+	}
+
+	private void setupHost() throws IOException {
+		// Queue for host messages
+		final String hostQueue = channel.queueDeclare().getQueue();
+
+		// Bind to public topics (single word topics)
+		channel.queueBind(hostQueue, getGameID(), "*");
+
+		// Start consuming
+		consume(hostQueue, new HostConsumer());
+	}
+
+	private void shutdown() {
+		try {
+			if (isHost) {
+				// Host closes game exchange
+				channel.exchangeDelete(getGameID());
+			}
+
+			// Close connection
+			this.channel.close();
+			this.connection.close();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -113,19 +150,63 @@ public class Client {
 				jsonMessage.getBytes());
 	}
 
-	private void shutdown() {
-		try {
-			if (isHost) {
-				// Host closes game exchange
-				channel.exchangeDelete(getGameID());
+	private void consume(String queue, Consumer consumer) throws IOException {
+		channel.basicConsume(queue, false, null, true, false, null, consumer);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> parseMessage(byte[] body) {
+		return (Map<String, Object>) new JSONReader().read(new String(body));
+	}
+
+	private class HostConsumer extends DefaultConsumer {
+
+		public HostConsumer() {
+			super(channel);
+		}
+
+		@Override
+		public void handleDelivery(String consumerTag, Envelope envelope,
+				BasicProperties properties, byte[] body) throws IOException {
+			String topic = envelope.getRoutingKey();
+			Map<String, Object> message = parseMessage(body);
+
+			// Delegate to appropriate method
+			if (topic.equals("join")) {
+				handleJoin(envelope, properties, message);
 			}
 
-			// Close connection
-			this.channel.close();
-			this.connection.close();
-		} catch (IOException e) {
-			e.printStackTrace();
+			// Acknowledge after processing
+			channel.basicAck(envelope.getDeliveryTag(), false);
 		}
+
+		private void handleJoin(Envelope envelope, BasicProperties properties,
+				Map<String, Object> message) {
+			Map<String, Object> reply = new HashMap<String, Object>();
+
+			// TODO Check game status
+
+			// Check player count
+			if (participants.size() >= 4) {
+				reply.put("success", false);
+				reply.put("error", "Too many players.");
+			}
+
+			String playerID = (String) message.get("playerID");
+
+			// Check if already exists
+			if (participants.contains(playerID)) {
+				reply.put("success", false);
+				reply.put("error", "Player already exists.");
+			}
+
+			// Add to participants
+			participants.add(playerID);
+			reply.put("success", true);
+
+			// TODO Send reply
+		}
+
 	}
 
 }
