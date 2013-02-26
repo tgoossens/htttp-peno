@@ -12,7 +12,6 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
@@ -24,7 +23,6 @@ import com.rabbitmq.tools.json.JSONWriter;
  */
 public class Client {
 
-	private final Connection connection;
 	private final Channel channel;
 	private final Handler handler;
 
@@ -35,13 +33,12 @@ public class Client {
 	private final Set<String> participants = Collections
 			.synchronizedSet(new HashSet<String>());
 
-	public Client(ConnectionFactory connectionFactory, Handler handler,
-			String gameID, String playerID) throws IOException {
+	public Client(Connection connection, Handler handler, String gameID,
+			String playerID) throws IOException {
 		this.handler = handler;
 		this.gameID = gameID;
 		this.playerID = playerID;
 
-		this.connection = connectionFactory.newConnection();
 		this.channel = connection.createChannel();
 
 		setup();
@@ -122,9 +119,8 @@ public class Client {
 				channel.exchangeDelete(getGameID());
 			}
 
-			// Close connection
+			// Close channel
 			this.channel.close();
-			this.connection.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
