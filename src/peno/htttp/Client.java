@@ -648,6 +648,10 @@ public class Client {
 						@Override
 						public void run() {
 							if (!isDone) {
+								// No response, first player in game
+								// Set game state
+								setGameState(GameState.WAITING);
+								// Join was successful
 								success();
 							}
 						}
@@ -671,7 +675,8 @@ public class Client {
 					setPlayer(playerID, isReady);
 					setGameState(gameState);
 					if (isFull()) {
-						// All players registered
+						// All players responded
+						// Short-circuit timeout
 						success();
 					}
 				} else {
@@ -774,8 +779,14 @@ public class Client {
 		public void handleDelivery(String consumerTag, Envelope envelope,
 				BasicProperties props, byte[] body) throws IOException {
 			String topic = envelope.getRoutingKey();
+			Map<String, Object> message = parseMessage(body);
 
-			if (topic.equals("start")) {
+			if (topic.equals("ready")) {
+				// Update player ready state
+				String playerID = (String) message.get("playerID");
+				Boolean isReady = (Boolean) message.get("isReady");
+				setPlayer(playerID, isReady);
+			} else if (topic.equals("start")) {
 				// Handle start
 				started();
 			} else if (topic.equals("stop")) {
