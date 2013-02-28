@@ -1,7 +1,5 @@
 package peno.htttp;
 
-import java.util.Collection;
-
 /**
  * A handler for game events.
  */

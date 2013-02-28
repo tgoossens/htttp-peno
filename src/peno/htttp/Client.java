@@ -109,13 +109,6 @@ public class Client {
 		return getGameState() != GameState.DISCONNECTED;
 	}
 
-	/**
-	 * Check whether the game is currently paused.
-	 */
-	public boolean isPaused() {
-		return getGameState() == GameState.PAUSED;
-	}
-
 	/*
 	 * Player tracking
 	 */
@@ -277,8 +270,43 @@ public class Client {
 	}
 
 	/*
-	 * Starting/stopping
+	 * Game state
 	 */
+
+	/**
+	 * Check if the game is started and running.
+	 */
+	public boolean isPlaying() {
+		return getGameState() == GameState.PLAYING;
+	}
+
+	/**
+	 * Check whether the game is currently paused.
+	 */
+	public boolean isPaused() {
+		return getGameState() == GameState.PAUSED;
+	}
+
+	/**
+	 * Check if the game can be started.
+	 */
+	public boolean canStart() {
+		switch (getGameState()) {
+		case WAITING:
+		case PAUSED:
+			// Game must be full
+			if (!isFull())
+				return false;
+			// All players must be ready
+			for (PlayerInfo playerInfo : players.values()) {
+				if (!playerInfo.isReady())
+					return false;
+			}
+			return true;
+		default:
+			return false;
+		}
+	}
 
 	/**
 	 * Check if the local player is ready to play.
@@ -307,17 +335,31 @@ public class Client {
 			Map<String, Object> message = new HashMap<String, Object>();
 			message.put("isReady", playerInfo.isReady());
 			publish("ready", message);
+
+			// Start automatically
+			if (canStart()) {
+				start();
+			}
 		}
 	}
 
 	// TODO Start automatically?
-	protected void start(Callback<Void> callback) {
+	protected void start() throws IllegalStateException, IOException {
 		if (!isConnected()) {
 			throw new IllegalStateException("Not connected to game.");
 		}
+		if (isPlaying()) {
+			throw new IllegalStateException("Game already started.");
+		}
+		if (!canStart()) {
+			throw new IllegalStateException("Cannot start the game.");
+		}
 
-		// TODO Check if can start
-		// started();
+		// Publish notification
+		publish("start", null);
+
+		// Handle start
+		started();
 	}
 
 	protected void started() {
@@ -330,40 +372,64 @@ public class Client {
 	/**
 	 * Stop the game completely.
 	 * 
-	 * @param callback
-	 *            A callback which receives the result of this request.
+	 * @throws IOException
 	 */
-	public void stop(Callback<Void> callback) {
+	public void stop() throws IOException {
 		if (!isConnected()) {
 			throw new IllegalStateException("Not connected to game.");
 		}
 
 		if (getGameState() == GameState.WAITING) {
 			// Game already stopped
-			callback.onSuccess(null);
+			return;
 		}
 
-		// TODO Send stop message
-		// stopped();
+		// Publish notification
+		publish("stop", null);
+
+		// Handle stop
+		stopped();
 	}
 
-	protected void stopped() {
+	protected void stopped() throws IOException {
 		// Update game state
 		setGameState(GameState.WAITING);
+		// Set as not ready
+		setReady(false);
 		// Call handler
 		handler.gameStopped();
 	}
 
-	protected void pause() throws IOException, IllegalStateException {
+	/**
+	 * Pause the game.
+	 * 
+	 * <p>
+	 * Call {@link #setReady(boolean)} when ready again to continue the game.
+	 * </p>
+	 * 
+	 * @throws IllegalStateException
+	 *             If not connected to the game, or if not playing.
+	 * @throws IOException
+	 */
+	public void pause() throws IOException, IllegalStateException {
 		if (!isConnected()) {
 			throw new IllegalStateException("Not connected to game.");
 		}
-
-		// Already paused
-		if (isPaused())
+		if (!isPlaying()) {
+			throw new IllegalStateException("Can only pause while playing.");
+		}
+		if (isPaused()) {
+			// Game already paused
 			return;
+		}
 
+		// Publish notification
 		publish("pause", null);
+
+		// Set as not ready
+		setReady(false);
+
+		// Handle pause
 		paused();
 	}
 
@@ -389,10 +455,16 @@ public class Client {
 	 *            The Y-coordinate of the position.
 	 * @param angle
 	 *            The angle of rotation.
+	 * @throws IllegalStateException
+	 *             If not connected to the game.
 	 * @throws IOException
 	 */
 	public void updatePosition(double x, double y, double angle)
-			throws IOException {
+			throws IllegalStateException, IOException {
+		if (!isConnected()) {
+			throw new IllegalStateException("Not connected to game.");
+		}
+
 		Map<String, Object> message = new HashMap<String, Object>();
 		message.put("x", x);
 		message.put("y", y);
@@ -419,6 +491,7 @@ public class Client {
 
 		// Attach consumers
 		channel.basicConsume(publicQueue, new JoinLeaveHandler(channel));
+		channel.basicConsume(publicQueue, new GameStateHandler(channel));
 	}
 
 	private void shutdownPublic() throws IOException {
@@ -449,17 +522,22 @@ public class Client {
 	 * Shutdown this client.
 	 * 
 	 * <p>
-	 * Leaves the game and then closes the opened channel.
+	 * Leave the game and then close the opened channel.
 	 * </p>
 	 */
 	public void shutdown() {
 		try {
 			// Leave the game
 			leave();
-			// Close channel
-			this.channel.close();
 		} catch (IOException e) {
 			e.printStackTrace();
+		} finally {
+			try {
+				// Close channel
+				this.channel.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -607,7 +685,7 @@ public class Client {
 			try {
 				// Mark as done
 				isDone = true;
-				// Setup
+				// Handle join
 				joined();
 				// Report success
 				callback.onSuccess(null);
@@ -624,7 +702,7 @@ public class Client {
 				channel.queueDelete(replyQueue);
 				// Report failure
 				callback.onFailure(new Exception("Request to join rejected"));
-				// Leave
+				// Handle leave
 				leave();
 			} catch (IOException e) {
 				callback.onFailure(e);
@@ -678,6 +756,34 @@ public class Client {
 				String playerID = (String) message.get("playerID");
 				// Handle player left
 				playerLeft(playerID);
+			}
+		}
+
+	}
+
+	/**
+	 * Handles game state changes
+	 */
+	private class GameStateHandler extends DefaultConsumer {
+
+		public GameStateHandler(Channel channel) {
+			super(channel);
+		}
+
+		@Override
+		public void handleDelivery(String consumerTag, Envelope envelope,
+				BasicProperties props, byte[] body) throws IOException {
+			String topic = envelope.getRoutingKey();
+
+			if (topic.equals("start")) {
+				// Handle start
+				started();
+			} else if (topic.equals("stop")) {
+				// Handle stopped
+				stopped();
+			} else if (topic.equals("pause")) {
+				// Handle paused
+				paused();
 			}
 		}
 
