@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 import peno.htttp.impl.ForwardingFailureCallback;
 import peno.htttp.impl.PlayerInfo;
+import peno.htttp.impl.PlayerState;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.BasicProperties;
@@ -83,6 +84,10 @@ public class Client {
 		return getGameState() != GameState.DISCONNECTED;
 	}
 
+	public boolean isPaused() {
+		return getGameState() == GameState.PAUSED;
+	}
+
 	/*
 	 * Player tracking
 	 */
@@ -98,11 +103,11 @@ public class Client {
 	}
 
 	private PlayerInfo getLocalPlayer() {
-		PlayerInfo localPlayer = getPlayer(getPlayerID());
-		if (localPlayer == null) {
-			localPlayer = new PlayerInfo(getPlayerID(), false);
+		String playerID = getPlayerID();
+		if (!hasPlayer(playerID)) {
+			setPlayer(playerID, PlayerState.NOT_READY);
 		}
-		return localPlayer;
+		return getPlayer(playerID);
 	}
 
 	private int getNbPlayers() {
@@ -115,13 +120,23 @@ public class Client {
 		return getNbPlayers() >= nbPlayers;
 	}
 
-	private void setPlayer(String playerID, boolean isReady) {
+	private void setPlayer(String playerID, PlayerState state) {
 		synchronized (players) {
 			if (hasPlayer(playerID)) {
-				players.get(playerID).setReady(isReady);
+				players.get(playerID).setState(state);
 			} else {
-				players.put(playerID, new PlayerInfo(playerID, isReady));
+				players.put(playerID, new PlayerInfo(playerID, state));
 			}
+		}
+	}
+
+	private void setPlayer(String playerID, boolean isReady) {
+		setPlayer(playerID, isReady ? PlayerState.READY : PlayerState.NOT_READY);
+	}
+
+	private void removePlayer(String playerID) {
+		synchronized (players) {
+			players.remove(playerID);
 		}
 	}
 
@@ -143,6 +158,7 @@ public class Client {
 	}
 
 	protected void joined() throws IOException {
+		// Setup public queue
 		setupPublic();
 	}
 
@@ -153,9 +169,7 @@ public class Client {
 			return false;
 		case PAUSED:
 			// Only missing players can join
-			if (!hasPlayer(playerID))
-				return false;
-			break;
+			return hasPlayer(playerID);
 		case WAITING:
 			// Reject duplicate players
 			if (hasPlayer(playerID))
@@ -169,10 +183,10 @@ public class Client {
 		return false;
 	}
 
-	public void leave(Callback<Void> callback) throws IOException {
+	public void leave() throws IOException {
 		if (isConnected()) {
 			// Notify leaving
-			publish(null, "leave");
+			publish("leave", null);
 			// Shut down
 			shutdownPublic();
 			shutdownTeam();
@@ -180,6 +194,31 @@ public class Client {
 
 		// Reset game
 		resetGame();
+	}
+
+	protected void playerLeft(String playerID) {
+		switch (getGameState()) {
+		case WAITING:
+			// Simply remove player
+			removePlayer(playerID);
+			break;
+		case PLAYING:
+		case PAUSED:
+			if (hasPlayer(playerID)) {
+				// Player went missing
+				getPlayer(playerID).setState(PlayerState.DISCONNECTED);
+				// Pause
+				try {
+					pause();
+				} catch (IllegalStateException | IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
 	/*
@@ -190,23 +229,59 @@ public class Client {
 		return getLocalPlayer().isReady();
 	}
 
-	public void setReady(boolean isReady) {
+	public void setReady(boolean isReady) throws IOException {
 		PlayerInfo playerInfo = getLocalPlayer();
-		if (isReady != playerInfo.isReady()) {
-			playerInfo.setReady(isReady);
+		PlayerState newState = isReady ? PlayerState.READY
+				: PlayerState.NOT_READY;
 
-			// TODO Publish updated ready state
+		if (newState != playerInfo.getState()) {
+			// Update state
+			playerInfo.setState(newState);
+
+			// Publish updated state
+			Map<String, Object> message = new HashMap<String, Object>();
+			message.put("isReady", playerInfo.isReady());
+			publish("ready", message);
 		}
 	}
 
 	protected void start(Callback<Void> callback) {
-		// TODO Auto-generated method stub
+		if (!isConnected()) {
+			throw new IllegalStateException("Not connected to game.");
+		}
 
+		// TODO Check if can start
 	}
 
 	public void stop(Callback<Void> callback) {
-		// TODO Auto-generated method stub
+		if (!isConnected()) {
+			throw new IllegalStateException("Not connected to game.");
+		}
 
+		if (getGameState() == GameState.WAITING) {
+			// Game already stopped
+			callback.onSuccess(null);
+		}
+	}
+
+	protected void pause() throws IOException, IllegalStateException {
+		if (!isConnected()) {
+			throw new IllegalStateException("Not connected to game.");
+		}
+
+		// Already paused
+		if (isPaused())
+			return;
+
+		publish("pause", null);
+		onPaused();
+	}
+
+	protected void onPaused() {
+		// Update game state
+		setGameState(GameState.PAUSED);
+		// Call handler
+		handler.gamePaused();
 	}
 
 	public void updatePosition(double x, double y, double angle)
@@ -215,7 +290,7 @@ public class Client {
 		message.put("x", x);
 		message.put("y", y);
 		message.put("angle", angle);
-		publish(message, "position");
+		publish("position", message);
 		// TODO Wait for result
 	}
 
@@ -236,7 +311,7 @@ public class Client {
 		channel.queueBind(publicQueue, getGameID(), "*");
 
 		// Attach consumers
-		channel.basicConsume(publicQueue, new JoinHandler(channel));
+		channel.basicConsume(publicQueue, new JoinLeaveHandler(channel));
 	}
 
 	private void shutdownPublic() throws IOException {
@@ -272,10 +347,7 @@ public class Client {
 
 		// Only retain local player
 		synchronized (players) {
-			PlayerInfo localPlayer = getPlayer(getPlayerID());
-			if (localPlayer == null) {
-				localPlayer = new PlayerInfo(getPlayerID(), false);
-			}
+			PlayerInfo localPlayer = getLocalPlayer();
 			players.clear();
 			players.put(getPlayerID(), localPlayer);
 		}
@@ -285,7 +357,7 @@ public class Client {
 	 * Helpers
 	 */
 
-	private void publish(Map<String, Object> message, String routingKey,
+	private void publish(String routingKey, Map<String, Object> message,
 			BasicProperties props) throws IOException {
 		// Default to empty message
 		if (message == null) {
@@ -303,9 +375,9 @@ public class Client {
 				jsonMessage.getBytes());
 	}
 
-	private void publish(Map<String, Object> message, String routingKey)
+	private void publish(String routingKey, Map<String, Object> message)
 			throws IOException {
-		publish(message, routingKey, defaultProps().build());
+		publish(routingKey, message, defaultProps().build());
 	}
 
 	private AMQP.BasicProperties.Builder defaultProps() {
@@ -313,8 +385,13 @@ public class Client {
 				.contentType("text/plain").deliveryMode(1);
 	}
 
+	private void consume(String queue, Consumer consumer, boolean autoAck)
+			throws IOException {
+		channel.basicConsume(queue, autoAck, "", true, false, null, consumer);
+	}
+
 	private void consume(String queue, Consumer consumer) throws IOException {
-		channel.basicConsume(queue, false, null, true, false, null, consumer);
+		consume(queue, consumer, true);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -344,13 +421,12 @@ public class Client {
 			// Publish "join" with local player info
 			PlayerInfo playerInfo = getLocalPlayer();
 			Map<String, Object> message = new HashMap<String, Object>();
-			message.put("playerID", playerInfo.getPlayerID());
 			message.put("isReady", playerInfo.isReady());
 
 			AMQP.BasicProperties props = defaultProps()
 					.expiration(timeout + "").replyTo(replyQueue).build();
 
-			publish(message, "join", props);
+			publish("join", message, props);
 
 			// Report success after timeout
 			Executors.newSingleThreadScheduledExecutor().schedule(
@@ -358,7 +434,7 @@ public class Client {
 						@Override
 						public void run() {
 							if (!isDone) {
-								callback.onSuccess(null);
+								success();
 							}
 						}
 					}, timeout, TimeUnit.MILLISECONDS);
@@ -382,24 +458,41 @@ public class Client {
 					setGameState(gameState);
 					if (isFull()) {
 						// All players registered
-						isDone = true;
-						// Report success
-						callback.onSuccess(null);
+						success();
 					}
 				} else if (topic.equals("reject")) {
 					// Rejected by peer
-					isDone = true;
-					// Stop listening
-					channel.queueDelete(replyQueue);
-					// Report failure
-					callback.onFailure(new Exception("Request to join rejected"));
-					// Leave
-					leave(new ForwardingFailureCallback<Void>(callback));
+					failure();
 				}
 			}
+		}
 
-			// Acknowledge after processing
-			channel.basicAck(envelope.getDeliveryTag(), false);
+		private void success() {
+			try {
+				// Mark as done
+				isDone = true;
+				// Setup
+				joined();
+				// Report success
+				callback.onSuccess(null);
+			} catch (IOException e) {
+				callback.onFailure(e);
+			}
+		}
+
+		private void failure() {
+			try {
+				// Mark as done
+				isDone = true;
+				// Stop listening
+				channel.queueDelete(replyQueue);
+				// Report failure
+				callback.onFailure(new Exception("Request to join rejected"));
+				// Leave
+				leave();
+			} catch (IOException e) {
+				callback.onFailure(e);
+			}
 		}
 
 	}
@@ -407,9 +500,9 @@ public class Client {
 	/**
 	 * Handles join requests
 	 */
-	private class JoinHandler extends DefaultConsumer {
+	private class JoinLeaveHandler extends DefaultConsumer {
 
-		public JoinHandler(Channel channel) {
+		public JoinLeaveHandler(Channel channel) {
 			super(channel);
 		}
 
@@ -446,12 +539,15 @@ public class Client {
 				}
 
 				// Send reply
-				publish(reply, replyTopic, replyProps);
+				publish(replyTopic, reply, replyProps);
+			} else if (topic.equals("leave")) {
+				// Read player info
+				String playerID = (String) message.get("playerID");
+				// Handle player left
+				playerLeft(playerID);
 			}
-
-			// Acknowledge after processing
-			channel.basicAck(envelope.getDeliveryTag(), false);
 		}
 
 	}
+
 }

@@ -9,17 +9,42 @@ public interface Handler {
 
 	/**
 	 * Invoked when the game has started.
-	 * 
-	 * @param players
-	 *            The list of participating players, as a collection of player
-	 *            identifiers.
 	 */
-	public void gameStarted(Collection<String> players);
+	public void gameStarted();
 
 	/**
 	 * Invoked when the game has stopped.
+	 * 
+	 * <p>
+	 * Players should stop their robot and can clear its state.
+	 * </p>
 	 */
 	public void gameStopped();
+
+	/**
+	 * Invoked when the game has paused.
+	 * 
+	 * <p>
+	 * Players should stop their robot but retain its state.
+	 * </p>
+	 */
+	public void gamePaused();
+
+	/**
+	 * Invoked when another player has joined the game.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void playerJoined(String playerID);
+
+	/**
+	 * Invoked when another player has left the game.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void playerLeft(String playerID);
 
 	/**
 	 * Invoked when a player updates its position.

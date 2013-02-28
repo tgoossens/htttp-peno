@@ -3,23 +3,27 @@ package peno.htttp.impl;
 public class PlayerInfo {
 
 	private final String playerID;
-	private volatile boolean isReady;
+	private PlayerState state;
 
-	public PlayerInfo(String playerID, boolean isReady) {
+	public PlayerInfo(String playerID, PlayerState state) {
 		this.playerID = playerID;
-		this.isReady = isReady;
+		setState(state);
 	}
 
 	public String getPlayerID() {
 		return playerID;
 	}
 
-	public boolean isReady() {
-		return isReady;
+	public PlayerState getState() {
+		return state;
 	}
 
-	public void setReady(boolean isReady) {
-		this.isReady = isReady;
+	public void setState(PlayerState state) {
+		this.state = state;
+	}
+
+	public boolean isReady() {
+		return state == PlayerState.READY;
 	}
 
 }
