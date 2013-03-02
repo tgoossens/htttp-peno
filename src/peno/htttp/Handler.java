@@ -29,7 +29,7 @@ public interface Handler {
 	public void gamePaused();
 
 	/**
-	 * Invoked when another player has joined the game.
+	 * Invoked when a player has joined the game.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
@@ -37,7 +37,7 @@ public interface Handler {
 	public void playerJoined(String playerID);
 
 	/**
-	 * Invoked when another player has left the game.
+	 * Invoked when a player has left the game.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
@@ -57,5 +57,13 @@ public interface Handler {
 	 *            The angle of the player's orientation.
 	 */
 	public void playerPosition(String playerID, double x, double y, double angle);
+
+	/**
+	 * Invoked when a player has found their object.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void playerFoundObject(String playerID);
 
 }
