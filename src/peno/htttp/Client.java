@@ -981,8 +981,12 @@ public class Client {
 				// Handle paused
 				paused();
 			} else if (topic.equals("roll")) {
+				// Handle roll
 				int roll = (Integer) message.get("roll");
 				receivedRoll(playerID, roll);
+			} else if (topic.equals("found")) {
+				// Handle object found
+				handler.playerFoundObject(playerID);
 			}
 		}
 
