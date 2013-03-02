@@ -550,7 +550,7 @@ public class Client {
 		}
 	}
 
-	public void replacePlayerNumbers(Map<String, Integer> numbers) {
+	protected void replacePlayerNumbers(Map<String, Integer> numbers) {
 		clearPlayerNumbers();
 		playerNumbers.putAll(numbers);
 	}
