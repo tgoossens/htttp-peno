@@ -1,29 +1,44 @@
 package peno.htttp.impl;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 public class PlayerRegister implements Iterable<PlayerInfo> {
 
 	private final Map<String, Map<String, PlayerInfo>> votedPlayers = new HashMap<String, Map<String, PlayerInfo>>();
+	private final Set<String> missingPlayers = new HashSet<String>();
 
 	/**
 	 * Add a client's player to the registry.
+	 * 
+	 * <p>
+	 * When a player with the same player identifier was missing before, it is
+	 * no longer missing.
+	 * </p>
 	 * 
 	 * @param player
 	 *            The player.
 	 */
 	public void addClient(PlayerInfo player) {
-		String clientID = player.getClientID();
 		String playerID = player.getPlayerID();
+		String clientID = player.getClientID();
 
+		// Get or add client map
 		Map<String, PlayerInfo> clients = votedPlayers.get(playerID);
 		if (clients == null) {
 			clients = new LinkedHashMap<String, PlayerInfo>();
 			votedPlayers.put(playerID, clients);
+		}
+
+		// Remove missing
+		if (missingPlayers.contains(playerID)) {
+			missingPlayers.remove(playerID);
 		}
 
 		// Add as *last* player in the client map
@@ -80,14 +95,60 @@ public class PlayerRegister implements Iterable<PlayerInfo> {
 	}
 
 	/**
+	 * Check whether the given player is currently missing.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public boolean isMissing(String playerID) {
+		return missingPlayers.contains(playerID);
+	}
+
+	/**
+	 * Check whether there are any players currently missing.
+	 */
+	public boolean hasMissing() {
+		return !missingPlayers.isEmpty();
+	}
+
+	/**
+	 * Get a set of all currently missing players.
+	 */
+	public Set<String> getMissing() {
+		return Collections.unmodifiableSet(missingPlayers);
+	}
+
+	/**
+	 * Clear all missing players.
+	 */
+	public void clearMissing() {
+		missingPlayers.clear();
+	}
+
+	/**
+	 * Mark the given player as missing.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void setMissing(String playerID) {
+		votedPlayers.remove(playerID);
+		missingPlayers.add(playerID);
+	}
+
+	/**
 	 * Get the amount of registered players.
 	 */
 	public int getNbPlayers() {
 		return votedPlayers.size();
 	}
 
+	/**
+	 * Clear all players in the register.
+	 */
 	public void clear() {
 		votedPlayers.clear();
+		clearMissing();
 	}
 
 	@Override

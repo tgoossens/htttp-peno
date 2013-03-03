@@ -4,12 +4,12 @@ public class PlayerInfo {
 
 	private final String clientID;
 	private final String playerID;
-	private PlayerState state;
+	private boolean isReady;
 
-	public PlayerInfo(String clientID, String playerID, PlayerState state) {
+	public PlayerInfo(String clientID, String playerID, boolean isReady) {
 		this.clientID = clientID;
 		this.playerID = playerID;
-		setState(state);
+		setReady(isReady);
 	}
 
 	public String getClientID() {
@@ -20,16 +20,12 @@ public class PlayerInfo {
 		return playerID;
 	}
 
-	public PlayerState getState() {
-		return state;
-	}
-
-	public void setState(PlayerState state) {
-		this.state = state;
-	}
-
 	public boolean isReady() {
-		return state == PlayerState.READY;
+		return isReady;
+	}
+
+	public void setReady(boolean isReady) {
+		this.isReady = isReady;
 	}
 
 }
