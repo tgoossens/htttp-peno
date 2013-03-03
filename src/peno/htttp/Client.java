@@ -984,6 +984,12 @@ public class Client {
 				// Handle roll
 				int roll = (Integer) message.get("roll");
 				receivedRoll(playerID, roll);
+			} else if (topic.equals("position")) {
+				// Handle position update
+				double x = ((Number) message.get("x")).doubleValue();
+				double y = ((Number) message.get("y")).doubleValue();
+				double angle = ((Number) message.get("angle")).doubleValue();
+				handler.playerPosition(playerID, x, y, angle);
 			} else if (topic.equals("found")) {
 				// Handle object found
 				handler.playerFoundObject(playerID);
