@@ -1020,8 +1020,10 @@ public class Client {
 				if (isAccepted) {
 					// Accept
 					playerJoined(clientID, playerID, isReady);
-					// Report state
+					// Report own player info
+					reply.put("clientID", getClientID());
 					reply.put("isReady", playerInfo.isReady());
+					// Report game state
 					writeGameState(reply);
 				} else {
 					// Reject
