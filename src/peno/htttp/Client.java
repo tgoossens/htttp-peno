@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -139,12 +140,28 @@ public class Client {
 	 */
 
 	/**
-	 * Get the number of players currently in the game.
+	 * Get the number of players currently in the game, including the local
+	 * player.
 	 */
 	public int getNbPlayers() {
 		synchronized (players) {
 			return players.getNbPlayers();
 		}
+	}
+
+	/**
+	 * Get the player identifiers of all connected players.
+	 * 
+	 * <p>
+	 * The returned set also includes the local player identifier.
+	 * </p>
+	 */
+	public Set<String> getPlayers() {
+		Set<String> playerIDs = new HashSet<String>();
+		for (PlayerInfo player : players) {
+			playerIDs.add(player.getPlayerID());
+		}
+		return playerIDs;
 	}
 
 	/**
