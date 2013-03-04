@@ -608,7 +608,7 @@ public class Client {
 		// Generate player numbers
 		playerNumbers.clear();
 		for (int i = 0; i < nbPlayers; ++i) {
-			playerNumbers.put(rolls[i].getPlayerID(), i + 1);
+			playerNumbers.put(rolls[i].getPlayerID(), i);
 		}
 	}
 
