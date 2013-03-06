@@ -556,11 +556,11 @@ public class Client {
 			return;
 		}
 
-		// Set as not ready
-		setReady(false);
-
 		// Publish
 		publish("pause", null);
+
+		// Set as not ready
+		setReady(false);
 	}
 
 	private synchronized void paused() {
