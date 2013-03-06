@@ -581,12 +581,11 @@ public class Client {
 	 * Get the local player's number to identify its object.
 	 * 
 	 * @throws IllegalStateException
-	 *             If not playing.
+	 *             If not rolled yet.
 	 */
 	public int getPlayerNumber() throws IllegalStateException {
-		if (!isPlaying()) {
-			throw new IllegalStateException(
-					"Can only retrieve player number while playing.");
+		if (!isRolled()) {
+			throw new IllegalStateException("Player number not rolled yet.");
 		}
 		return playerNumbers.get(getPlayerID());
 	}
@@ -673,8 +672,8 @@ public class Client {
 		}
 
 		// Check if done
-		if (playerRolls.size() == nbPlayers) {
-			// Sort rolls
+		if (!isRolled() && playerRolls.size() == nbPlayers) {
+			// Sort rolls and retrieve player numbers
 			sortPlayerRolls();
 			// Call handler
 			handler.gameRolled(getPlayerNumber());

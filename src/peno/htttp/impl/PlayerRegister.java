@@ -217,10 +217,10 @@ public class PlayerRegister {
 	}
 
 	/**
-	 * Get the amount of registered players.
+	 * Get the amount of confirmed players.
 	 */
 	public int getNbPlayers() {
-		return voted.size();
+		return confirmed.size();
 	}
 
 	/**
