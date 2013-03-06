@@ -1,21 +1,20 @@
 package peno.htttp.impl;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Set;
 
-public class PlayerRegister implements Iterable<PlayerInfo> {
+public class PlayerRegister {
 
-	private final Map<String, Map<String, PlayerInfo>> votedPlayers = new HashMap<String, Map<String, PlayerInfo>>();
-	private final Set<String> missingPlayers = new HashSet<String>();
+	private final Map<String, PlayerInfo> confirmed = new HashMap<String, PlayerInfo>();
+	private final Map<String, Map<String, PlayerInfo>> voted = new HashMap<String, Map<String, PlayerInfo>>();
+	private final Set<String> missing = new HashSet<String>();
 
 	/**
-	 * Add a client's player to the registry.
+	 * Confirm a client's player and add it to the registry.
 	 * 
 	 * <p>
 	 * When a player with the same player identifier was missing before, it is
@@ -25,24 +24,50 @@ public class PlayerRegister implements Iterable<PlayerInfo> {
 	 * @param player
 	 *            The player.
 	 */
-	public void addClient(PlayerInfo player) {
+	public void confirm(PlayerInfo player) {
 		String playerID = player.getPlayerID();
 		String clientID = player.getClientID();
 
-		// Get or add client map
-		Map<String, PlayerInfo> clients = votedPlayers.get(playerID);
-		if (clients == null) {
-			clients = new LinkedHashMap<String, PlayerInfo>();
-			votedPlayers.put(playerID, clients);
+		// Add to confirmed
+		confirmed.put(playerID, player);
+
+		// Remove from voted
+		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		if (votedClients != null) {
+			votedClients.remove(clientID);
 		}
+
+		// Remove from missing
+		missing.remove(playerID);
+	}
+
+	/**
+	 * Vote for a client's player.
+	 * 
+	 * <p>
+	 * When a player with the same player identifier was missing before, it is
+	 * no longer missing.
+	 * </p>
+	 * 
+	 * @param player
+	 *            The player.
+	 */
+	public void vote(PlayerInfo player) {
+		String playerID = player.getPlayerID();
+		String clientID = player.getClientID();
+
+		// Add to voted clients
+		Map<String, PlayerInfo> clients = voted.get(playerID);
+		if (clients == null) {
+			clients = new HashMap<String, PlayerInfo>();
+			voted.put(playerID, clients);
+		}
+		clients.put(clientID, player);
 
 		// Remove missing
-		if (missingPlayers.contains(playerID)) {
-			missingPlayers.remove(playerID);
+		if (missing.contains(playerID)) {
+			missing.remove(playerID);
 		}
-
-		// Add as *last* player in the client map
-		clients.put(clientID, player);
 	}
 
 	/**
@@ -53,42 +78,96 @@ public class PlayerRegister implements Iterable<PlayerInfo> {
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	public void removeClient(String clientID, String playerID) {
-		Map<String, PlayerInfo> clients = votedPlayers.get(playerID);
-		if (clients != null) {
+	public void remove(String clientID, String playerID) {
+		// Remove confirmed player if needed
+		if (hasConfirmed(clientID, playerID)) {
+			confirmed.remove(playerID);
+		}
+
+		// Remove voted client
+		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		if (votedClients != null) {
 			// Remove from client map
-			clients.remove(clientID);
-			if (clients.isEmpty()) {
+			votedClients.remove(clientID);
+			if (votedClients.isEmpty()) {
 				// Clean up empty client map
-				votedPlayers.remove(playerID);
+				voted.remove(playerID);
 			}
 		}
 	}
 
 	/**
-	 * Get the player with the given player identifier.
+	 * Check if there is a confirmed player with the given player identifier.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	public PlayerInfo getPlayer(String playerID) {
-		return getValidPlayer(votedPlayers.get(playerID));
+	public boolean hasConfirmed(String playerID) {
+		return confirmed.containsKey(playerID);
 	}
 
 	/**
-	 * Check if a player with the given player identifier is registered.
+	 * Check whether the given player is confirmed.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	public boolean hasPlayer(String playerID) {
-		return getPlayer(playerID) != null;
+	public boolean hasConfirmed(String clientID, String playerID) {
+		return hasConfirmed(playerID)
+				&& getConfirmed(playerID).getClientID().equals(clientID);
 	}
 
-	protected PlayerInfo getValidPlayer(Map<String, PlayerInfo> clients) {
-		if (clients != null && !clients.isEmpty()) {
-			// Get the *first* player info from the client map
-			return clients.values().iterator().next();
+	/**
+	 * Get the confirmed player with the given player identifier.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public PlayerInfo getConfirmed(String playerID) {
+		return confirmed.get(playerID);
+	}
+
+	/**
+	 * Get all currently confirmed players.
+	 */
+	public Collection<PlayerInfo> getConfirmed() {
+		return Collections.unmodifiableCollection(confirmed.values());
+	}
+
+	/**
+	 * Check if a client's player can join.
+	 * 
+	 * @param clientID
+	 *            The client identifier.
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public boolean canJoin(String clientID, String playerID) {
+		// Check if colliding with confirmed player
+		if (hasConfirmed(playerID)) {
+			// Needs to match the confirmed player
+			return hasConfirmed(clientID, playerID);
+		}
+
+		// Check if already voted for given player
+		return !hasVoted(playerID);
+	}
+
+	/**
+	 * Check if a player with the given player identifier has been voted for.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public boolean hasVoted(String playerID) {
+		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		return votedClients != null && !votedClients.isEmpty();
+	}
+
+	public PlayerInfo getVoted(String clientID, String playerID) {
+		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		if (votedClients != null) {
+			return votedClients.get(clientID);
 		} else {
 			return null;
 		}
@@ -101,28 +180,28 @@ public class PlayerRegister implements Iterable<PlayerInfo> {
 	 *            The player identifier.
 	 */
 	public boolean isMissing(String playerID) {
-		return missingPlayers.contains(playerID);
+		return missing.contains(playerID);
 	}
 
 	/**
 	 * Check whether there are any players currently missing.
 	 */
 	public boolean hasMissing() {
-		return !missingPlayers.isEmpty();
+		return !missing.isEmpty();
 	}
 
 	/**
 	 * Get a set of all currently missing players.
 	 */
 	public Set<String> getMissing() {
-		return Collections.unmodifiableSet(missingPlayers);
+		return Collections.unmodifiableSet(missing);
 	}
 
 	/**
 	 * Clear all missing players.
 	 */
 	public void clearMissing() {
-		missingPlayers.clear();
+		missing.clear();
 	}
 
 	/**
@@ -132,67 +211,25 @@ public class PlayerRegister implements Iterable<PlayerInfo> {
 	 *            The player identifier.
 	 */
 	public void setMissing(String playerID) {
-		votedPlayers.remove(playerID);
-		missingPlayers.add(playerID);
+		confirmed.remove(playerID);
+		voted.remove(playerID);
+		missing.add(playerID);
 	}
 
 	/**
 	 * Get the amount of registered players.
 	 */
 	public int getNbPlayers() {
-		return votedPlayers.size();
+		return voted.size();
 	}
 
 	/**
 	 * Clear all players in the register.
 	 */
 	public void clear() {
-		votedPlayers.clear();
+		confirmed.clear();
+		voted.clear();
 		clearMissing();
-	}
-
-	@Override
-	public Iterator<PlayerInfo> iterator() {
-		return new Itr();
-	}
-
-	private class Itr implements Iterator<PlayerInfo> {
-
-		private Iterator<Map<String, PlayerInfo>> itr;
-		private boolean isComputed;
-		private PlayerInfo next;
-
-		public Itr() {
-			itr = votedPlayers.values().iterator();
-		}
-
-		@Override
-		public boolean hasNext() {
-			if (!isComputed) {
-				isComputed = true;
-				next = null;
-				do {
-					if (!itr.hasNext())
-						break;
-					next = getValidPlayer(itr.next());
-				} while (itr.hasNext() && next == null);
-			}
-			return (next != null);
-		}
-
-		@Override
-		public PlayerInfo next() {
-			if (!hasNext())
-				throw new NoSuchElementException();
-			isComputed = false;
-			return next;
-		}
-
-		@Override
-		public void remove() {
-			throw new UnsupportedOperationException();
-		}
-
 	}
 
 }

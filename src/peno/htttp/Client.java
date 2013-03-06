@@ -40,12 +40,13 @@ public class Client {
 	/*
 	 * Communication
 	 */
-	private final Channel channel;
+	private final Connection connection;
+	private Channel channel;
+	private RequestProvider requestProvider;
 	private final Handler handler;
 	private String joinQueue;
 	private String publicQueue;
 	private String teamQueue;
-	private final RequestProvider requestProvider;
 
 	/*
 	 * Identifiers
@@ -55,7 +56,7 @@ public class Client {
 	/*
 	 * Game state
 	 */
-	private GameState gameState = GameState.DISCONNECTED;
+	private volatile GameState gameState = GameState.DISCONNECTED;
 	private final PlayerInfo localPlayer;
 	private final PlayerRegister players = new PlayerRegister();
 
@@ -80,13 +81,12 @@ public class Client {
 	 */
 	public Client(Connection connection, Handler handler, String gameID,
 			String playerID) throws IOException {
+		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
 		this.localPlayer = new PlayerInfo(UUID.randomUUID().toString(),
 				playerID, false);
 
-		this.channel = connection.createChannel();
-		this.requestProvider = new RequestProvider(channel);
 		setup();
 	}
 
@@ -150,7 +150,7 @@ public class Client {
 	}
 
 	/**
-	 * Get the player identifiers of all connected players.
+	 * Get the player identifiers of all confirmed players.
 	 * 
 	 * <p>
 	 * The returned set also includes the local player identifier.
@@ -158,8 +158,10 @@ public class Client {
 	 */
 	public Set<String> getPlayers() {
 		Set<String> playerIDs = new HashSet<String>();
-		for (PlayerInfo player : players) {
-			playerIDs.add(player.getPlayerID());
+		synchronized (players) {
+			for (PlayerInfo player : players.getConfirmed()) {
+				playerIDs.add(player.getPlayerID());
+			}
 		}
 		return playerIDs;
 	}
@@ -173,13 +175,19 @@ public class Client {
 
 	private boolean hasPlayer(String playerID) {
 		synchronized (players) {
-			return players.hasPlayer(playerID);
+			return players.hasConfirmed(playerID);
+		}
+	}
+
+	private boolean hasPlayer(String clientID, String playerID) {
+		synchronized (players) {
+			return players.hasConfirmed(clientID, playerID);
 		}
 	}
 
 	private PlayerInfo getPlayer(String playerID) {
 		synchronized (players) {
-			return players.getPlayer(playerID);
+			return players.getConfirmed(playerID);
 		}
 	}
 
@@ -187,15 +195,27 @@ public class Client {
 		return localPlayer;
 	}
 
-	private void addPlayer(PlayerInfo player) {
+	private void confirmPlayer(String clientID, String playerID, boolean isReady) {
 		synchronized (players) {
-			players.addClient(player);
+			PlayerInfo player = players.getVoted(clientID, playerID);
+			if (player == null) {
+				player = new PlayerInfo(clientID, playerID, isReady);
+			} else {
+				player.setReady(isReady);
+			}
+			players.confirm(player);
+		}
+	}
+
+	private void votePlayer(String clientID, String playerID, boolean isReady) {
+		synchronized (players) {
+			players.vote(new PlayerInfo(clientID, playerID, isReady));
 		}
 	}
 
 	private void removePlayer(String clientID, String playerID) {
 		synchronized (players) {
-			players.removeClient(clientID, playerID);
+			players.remove(clientID, playerID);
 		}
 	}
 
@@ -244,10 +264,10 @@ public class Client {
 			throw new IllegalStateException("Already connected to game.");
 		}
 
-		// Reset
-		resetGame();
-
 		// Setup
+		setup();
+
+		// Setup join
 		setGameState(GameState.JOINING);
 		setupJoin();
 
@@ -261,7 +281,7 @@ public class Client {
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	protected boolean canJoin(String playerID) {
+	protected boolean canJoin(String clientID, String playerID) {
 		switch (getGameState()) {
 		case PLAYING:
 			// Nobody can join while playing
@@ -272,7 +292,7 @@ public class Client {
 		case JOINING:
 		case WAITING:
 			// Reject duplicate players
-			if (hasPlayer(playerID))
+			if (!players.canJoin(clientID, playerID))
 				return false;
 			// Reject when full
 			if (isFull())
@@ -289,6 +309,8 @@ public class Client {
 	}
 
 	private void playerJoined(String clientID, String playerID, boolean isReady) {
+		// Confirm player
+		confirmPlayer(clientID, playerID, isReady);
 		// Report
 		handler.playerJoined(playerID);
 	}
@@ -308,22 +330,35 @@ public class Client {
 	public void leave() throws IOException {
 		// Reset game
 		resetGame();
-		// Shut down everything
 		try {
+			// Shut down queues
 			shutdownJoin();
 			shutdownPublic();
 			shutdownTeam();
-			// Publish "leave"
+			// Publish leave
 			Map<String, Object> message = newMessage();
 			message.put("clientID", getClientID());
 			publish("leave", message);
+		} catch (IOException e) {
+			throw e;
 		} catch (ShutdownSignalException e) {
+		} finally {
+			try {
+				// Shut down channel
+				channel.close();
+			} catch (IOException | ShutdownSignalException e) {
+			} finally {
+				channel = null;
+				requestProvider = null;
+			}
 		}
 	}
 
 	private void playerLeft(String clientID, String playerID) {
 		// Report
-		handler.playerLeft(playerID);
+		if (hasPlayer(clientID, playerID)) {
+			handler.playerLeft(playerID);
+		}
 
 		switch (getGameState()) {
 		case WAITING:
@@ -373,7 +408,7 @@ public class Client {
 			if (!isFull())
 				return false;
 			// All players must be ready
-			for (PlayerInfo playerInfo : players) {
+			for (PlayerInfo playerInfo : players.getConfirmed()) {
 				if (!playerInfo.isReady())
 					return false;
 			}
@@ -398,19 +433,28 @@ public class Client {
 	 * @throws IOException
 	 */
 	public void setReady(boolean isReady) throws IOException {
-		PlayerInfo playerInfo = getLocalPlayer();
-
-		if (isReady != playerInfo.isReady()) {
-			// Update state
-			playerInfo.setReady(isReady);
-
+		if (isReady != getLocalPlayer().isReady()) {
 			// Publish updated state
 			Map<String, Object> message = newMessage();
 			message.put("isReady", isReady);
 			publish("ready", message);
 
-			// Try to start automatically
-			tryStart();
+			// Handle local player ready
+			playerReady(getPlayerID(), isReady);
+		}
+	}
+
+	private void playerReady(String playerID, boolean isReady)
+			throws IOException {
+		// Set ready state
+		getPlayer(playerID).setReady(isReady);
+
+		if (isReady) {
+			// Try to start rolling
+			tryRoll();
+		} else if (getGameState() == GameState.WAITING) {
+			// Clear rolls when not ready while waiting
+			clearPlayerNumbers();
 		}
 	}
 
@@ -418,10 +462,11 @@ public class Client {
 	 * Start the game.
 	 * 
 	 * @throws IllegalStateException
-	 *             If not joined, if already started or if unable to start.
+	 *             If not joined, if already started, if unable to start or if
+	 *             player numbers not rolled yet.
 	 * @throws IOException
 	 */
-	protected void start() throws IllegalStateException, IOException {
+	public void start() throws IllegalStateException, IOException {
 		if (!isJoined()) {
 			throw new IllegalStateException("Not joined in the game.");
 		}
@@ -431,43 +476,22 @@ public class Client {
 		if (!canStart()) {
 			throw new IllegalStateException("Cannot start the game.");
 		}
+		if (!isRolled()) {
+			throw new IllegalStateException("Player numbers not rolled yet.");
+		}
 
 		// Publish
 		publish("start", null);
-	}
-
-	/**
-	 * Attempt to start the game.
-	 * 
-	 * @throws IOException
-	 */
-	protected boolean tryStart() throws IOException {
-		if (isJoined() && !isPlaying() && canStart()) {
-			start();
-			return true;
-		}
-		return false;
 	}
 
 	private synchronized void started() {
 		if (isPlaying())
 			return;
 
-		if (needRoll()) {
-			try {
-				// Roll for player numbers
-				roll();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		} else {
-			// Already rolled
-			// Update game state
-			setGameState(GameState.PLAYING);
-			// call handler
-			handler.gameStarted();
-		}
+		// Update game state
+		setGameState(GameState.PLAYING);
+		// Call handler
+		handler.gameStarted();
 	}
 
 	/**
@@ -567,35 +591,93 @@ public class Client {
 		return playerNumbers.get(getPlayerID());
 	}
 
-	private boolean needRoll() {
-		return playerNumbers.isEmpty();
+	/**
+	 * Check if the player numbers have been rolled.
+	 */
+	public boolean isRolled() {
+		return playerNumbers.size() == nbPlayers;
 	}
 
-	private void roll() throws IOException {
-		if (!needRoll())
-			return;
+	/**
+	 * Roll for player numbers.
+	 * 
+	 * 
+	 * @throws IllegalStateException
+	 *             If not joined, if already started, if unable to start or if
+	 *             player numbers already rolled.
+	 * @throws IOException
+	 */
+	protected void roll() throws IOException {
+		if (!isJoined()) {
+			throw new IllegalStateException("Not joined in the game.");
+		}
+		if (isPlaying()) {
+			throw new IllegalStateException("Game already started.");
+		}
+		if (!canStart()) {
+			throw new IllegalStateException("Cannot start the game.");
+		}
+		if (isRolled()) {
+			throw new IllegalStateException(
+					"Already rolled for player numbers.");
+		}
 
+		// Roll own number if needed
+		if (!hasRolledOwn()) {
+			rollOwn();
+		}
+		// Publish own number
+		rollPublish();
+	}
+
+	/**
+	 * Attempt to start the game.
+	 * 
+	 * @throws IOException
+	 */
+	protected boolean tryRoll() throws IOException {
+		if (isJoined() && !isPlaying() && canStart() && !isRolled()) {
+			roll();
+			return true;
+		}
+		return false;
+	}
+
+	private boolean hasRolledOwn() {
+		return playerRolls.containsKey(getPlayerID());
+	}
+
+	private void rollOwn() {
 		// Roll for player number
 		int roll = new Random().nextInt();
-
 		// Store own roll
 		playerRolls.put(getPlayerID(), new PlayerRoll(getPlayerID(), roll));
+	}
 
-		// Publish
+	private void rollPublish() throws IOException {
+		// Publish own roll
+		int roll = playerRolls.get(getPlayerID()).getRoll();
 		Map<String, Object> message = newMessage();
 		message.put("roll", roll);
 		publish("roll", message);
 	}
 
-	private void receivedRoll(String playerID, int roll) {
+	private void rollReceived(String playerID, int roll) throws IOException {
 		// Store roll
 		playerRolls.put(playerID, new PlayerRoll(playerID, roll));
 
+		// Roll and publish own number if needed
+		if (!hasRolledOwn()) {
+			rollOwn();
+			rollPublish();
+		}
+
+		// Check if done
 		if (playerRolls.size() == nbPlayers) {
 			// Sort rolls
 			sortPlayerRolls();
-			// Start
-			started();
+			// Call handler
+			handler.gameRolled(getPlayerNumber());
 		}
 	}
 
@@ -706,6 +788,9 @@ public class Client {
 	private void setup() throws IOException {
 		// Reset game
 		resetGame();
+		// Create channel
+		channel = connection.createChannel();
+		requestProvider = new RequestProvider(channel);
 		// Declare exchange
 		channel.exchangeDeclare(getGameID(), "topic");
 	}
@@ -772,11 +857,6 @@ public class Client {
 			leave();
 		} catch (IOException e) {
 		}
-		try {
-			// Close channel
-			channel.close();
-		} catch (IOException | ShutdownSignalException e) {
-		}
 	}
 
 	private void resetGame() {
@@ -789,7 +869,7 @@ public class Client {
 		// Only retain local player
 		synchronized (players) {
 			players.clear();
-			addPlayer(getLocalPlayer());
+			players.confirm(getLocalPlayer());
 		}
 	}
 
@@ -819,9 +899,11 @@ public class Client {
 
 	private void writeGameState(Map<String, Object> message) {
 		// Game state
-		message.put("gameState", isJoined() ? getGameState().name() : null);
+		if (isJoined()) {
+			message.put("gameState", getGameState().name());
+		}
 		// Player numbers
-		if (!needRoll()) {
+		if (isRolled()) {
 			message.put("playerNumbers", playerNumbers);
 		}
 		// Missing players
@@ -895,12 +977,8 @@ public class Client {
 			// Mark as working
 			isDone = false;
 
-			// Publish "join" with own player info
-			PlayerInfo playerInfo = getLocalPlayer();
-			Map<String, Object> message = newMessage();
-			message.put("clientID", getClientID());
-			message.put("isReady", playerInfo.isReady());
-
+			// Publish join with own player info
+			Map<String, Object> message = createMessage();
 			request(getGameID(), "join", prepareMessage(message), timeout);
 		}
 
@@ -919,7 +997,7 @@ public class Client {
 				Boolean isReady = (Boolean) message.get("isReady");
 
 				// Store player
-				addPlayer(new PlayerInfo(clientID, playerID, isReady));
+				confirmPlayer(clientID, playerID, isReady);
 
 				// Read game state
 				readGameState(message);
@@ -952,6 +1030,8 @@ public class Client {
 			try {
 				// Cancel request
 				cancel();
+				// Publish joined
+				publish("joined", createMessage());
 				// Handle join
 				joined();
 				// Report success
@@ -982,6 +1062,14 @@ public class Client {
 			cancelRequest();
 		}
 
+		private Map<String, Object> createMessage() {
+			PlayerInfo playerInfo = getLocalPlayer();
+			Map<String, Object> message = newMessage();
+			message.put("clientID", playerInfo.getClientID());
+			message.put("isReady", playerInfo.isReady());
+			return message;
+		}
+
 	}
 
 	/**
@@ -1010,27 +1098,27 @@ public class Client {
 				Map<String, Object> reply = newMessage();
 
 				// Check if accepted
-				boolean isAccepted = canJoin(playerID);
+				boolean isAccepted = canJoin(clientID, playerID);
 				reply.put("result", isAccepted);
 
 				// Store player
 				boolean isReady = (Boolean) message.get("isReady");
-				addPlayer(new PlayerInfo(clientID, playerID, isReady));
+				votePlayer(clientID, playerID, isReady);
 
 				if (isAccepted) {
-					// Accept
-					playerJoined(clientID, playerID, isReady);
 					// Report own player info
 					reply.put("clientID", getClientID());
 					reply.put("isReady", playerInfo.isReady());
 					// Report game state
 					writeGameState(reply);
-				} else {
-					// Reject
 				}
 
 				// Send reply
 				reply(props, reply);
+			} else if (topic.equals("joined")) {
+				// Handle player joined
+				boolean isReady = (Boolean) message.get("isReady");
+				playerJoined(clientID, playerID, isReady);
 			} else if (topic.equals("leave")) {
 				// Handle player left
 				playerLeft(clientID, playerID);
@@ -1053,9 +1141,9 @@ public class Client {
 				BasicProperties props) throws IOException {
 			String playerID = (String) message.get("playerID");
 			if (topic.equals("ready")) {
-				// Update player ready state
+				// Handle player ready
 				boolean isReady = (Boolean) message.get("isReady");
-				getPlayer(playerID).setReady(isReady);
+				playerReady(playerID, isReady);
 			} else if (topic.equals("start")) {
 				// Handle start
 				started();
@@ -1068,7 +1156,7 @@ public class Client {
 			} else if (topic.equals("roll")) {
 				// Handle roll
 				int roll = (Integer) message.get("roll");
-				receivedRoll(playerID, roll);
+				rollReceived(playerID, roll);
 			} else if (topic.equals("position")) {
 				// Handle position update
 				double x = ((Number) message.get("x")).doubleValue();

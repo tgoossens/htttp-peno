@@ -29,6 +29,14 @@ public interface Handler {
 	public void gamePaused();
 
 	/**
+	 * Invoked when the player numbers have been rolled.
+	 * 
+	 * @param playerNumber
+	 *            The local player's player number.
+	 */
+	public void gameRolled(int playerNumber);
+
+	/**
 	 * Invoked when a player has joined the game.
 	 * 
 	 * @param playerID
