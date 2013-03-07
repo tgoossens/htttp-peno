@@ -9,6 +9,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import peno.htttp.impl.Consumer;
 import peno.htttp.impl.PlayerInfo;
@@ -66,6 +70,12 @@ public class Client {
 	private final Map<String, Integer> playerNumbers = new HashMap<String, Integer>();
 	private final Map<String, PlayerRoll> playerRolls = new HashMap<String, PlayerRoll>();
 
+	/*
+	 * Heartbeat
+	 */
+	private final ScheduledExecutorService executor;
+	private ScheduledFuture<?> heartbeatTask;
+
 	/**
 	 * Create a game client.
 	 * 
@@ -79,14 +89,15 @@ public class Client {
 	 *            The local player identifier.
 	 * @throws IOException
 	 */
-	public Client(Connection connection, Handler handler, String gameID,
-			String playerID) throws IOException {
+	public Client(Connection connection, Handler handler, String gameID, String playerID) throws IOException {
 		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
 
 		String clientID = UUID.randomUUID().toString();
 		this.localPlayer = new PlayerInfo(clientID, playerID);
+
+		this.executor = Executors.newSingleThreadScheduledExecutor();
 
 		setup();
 	}
@@ -258,8 +269,7 @@ public class Client {
 	 *             If this client is already connected to the game.
 	 * @throws IOException
 	 */
-	public void join(final Callback<Void> callback)
-			throws IllegalStateException, IOException {
+	public void join(final Callback<Void> callback) throws IllegalStateException, IOException {
 		if (isConnected()) {
 			throw new IllegalStateException("Already connected to game.");
 		}
@@ -270,6 +280,9 @@ public class Client {
 		// Setup join
 		setGameState(GameState.JOINING);
 		setupJoin();
+
+		// Start heart beats
+		heartbeatStart();
 
 		// Request to join
 		new JoinRequester(callback).request(joinExpiration);
@@ -335,6 +348,8 @@ public class Client {
 			shutdownJoin();
 			shutdownPublic();
 			shutdownTeam();
+			// Stop heart beats
+			heartbeatStop();
 			// Publish leave
 			Map<String, Object> message = newMessage();
 			message.put("clientID", getClientID());
@@ -444,8 +459,7 @@ public class Client {
 		}
 	}
 
-	private void playerReady(String playerID, boolean isReady)
-			throws IOException {
+	private void playerReady(String playerID, boolean isReady) throws IOException {
 		// Set ready state
 		getPlayer(playerID).setReady(isReady);
 
@@ -477,8 +491,7 @@ public class Client {
 			throw new IllegalStateException("Cannot start the game.");
 		}
 		if (!hasPlayerNumber()) {
-			throw new IllegalStateException(
-					"Player numbers not determined yet.");
+			throw new IllegalStateException("Player numbers not determined yet.");
 		}
 
 		// Publish
@@ -617,8 +630,7 @@ public class Client {
 			throw new IllegalStateException("Cannot start the game.");
 		}
 		if (hasPlayerNumber()) {
-			throw new IllegalStateException(
-					"Already rolled for player numbers.");
+			throw new IllegalStateException("Already rolled for player numbers.");
 		}
 
 		// Roll own number if needed
@@ -682,8 +694,7 @@ public class Client {
 
 	private void sortPlayerRolls() {
 		// Sort rolls
-		PlayerRoll[] rolls = playerRolls.values().toArray(
-				new PlayerRoll[nbPlayers]);
+		PlayerRoll[] rolls = playerRolls.values().toArray(new PlayerRoll[nbPlayers]);
 		Arrays.sort(rolls);
 
 		// Generate player numbers
@@ -726,8 +737,7 @@ public class Client {
 	 *             If not joined in the game.
 	 * @throws IOException
 	 */
-	public void updatePosition(double x, double y, double angle)
-			throws IllegalStateException, IOException {
+	public void updatePosition(double x, double y, double angle) throws IllegalStateException, IOException {
 		if (!isJoined()) {
 			throw new IllegalStateException("Not joined in the game.");
 		}
@@ -749,12 +759,86 @@ public class Client {
 	 */
 	public void foundObject() throws IllegalStateException, IOException {
 		if (!isPlaying()) {
-			throw new IllegalStateException(
-					"Cannot find object when not playing.");
+			throw new IllegalStateException("Cannot find object when not playing.");
 		}
 
 		// Publish
 		publish("found", null);
+	}
+
+	/*
+	 * Heart beat
+	 */
+
+	protected void heartbeatStart() {
+		// Stop if still running
+		heartbeatStop();
+
+		// Start beating
+		heartbeatTask = executor.scheduleAtFixedRate(new HeartbeatTask(), 0, heartbeatFrequency, TimeUnit.MILLISECONDS);
+	}
+
+	protected void heartbeatStop() {
+		if (heartbeatTask != null) {
+			heartbeatTask.cancel(false);
+			heartbeatTask = null;
+		}
+	}
+
+	private void heartbeatPublish() throws IOException {
+		// Update own heartbeat
+		long timestamp = System.currentTimeMillis();
+		getLocalPlayer().setLastHeartbeat(timestamp);
+
+		// Publish
+		publish("heartbeat", null);
+	}
+
+	private void heartbeatCheck() throws IOException {
+		final long limit = System.currentTimeMillis() - heartbeatExpiration;
+		// Clone for safe iteration
+		final PlayerInfo[] confirmed = players.getConfirmed().toArray(new PlayerInfo[0]);
+		// Check all confirmed players
+		for (PlayerInfo player : confirmed) {
+			final long lastHeartbeat = player.getLastHeartbeat();
+			if (lastHeartbeat > 0 && lastHeartbeat < limit) {
+				// Heart beat expired, report missing
+				heartbeatMissing(player);
+			}
+		}
+	}
+
+	private void heartbeatMissing(PlayerInfo player) throws IOException {
+		// Publish leave for player
+		Map<String, Object> message = newMessage();
+		message.put("playerID", player.getPlayerID());
+		message.put("clientID", player.getClientID());
+		publish("leave", message);
+	}
+
+	private void heartbeatReceived(String playerID) {
+		PlayerInfo player = getPlayer(playerID);
+		if (player != null) {
+			player.setLastHeartbeat(System.currentTimeMillis());
+		}
+	}
+
+	private class HeartbeatTask implements Runnable {
+
+		@Override
+		public void run() {
+			try {
+				// Publish and check
+				heartbeatPublish();
+				if (isJoined()) {
+					heartbeatCheck();
+				}
+			} catch (IOException e) {
+				// Bail out
+				heartbeatStop();
+			}
+		}
+
 	}
 
 	/*
@@ -772,8 +856,7 @@ public class Client {
 	 */
 	public void joinTeam(int teamId) throws IOException {
 		if (!isPlaying()) {
-			throw new IllegalStateException(
-					"Cannot join team when not playing.");
+			throw new IllegalStateException("Cannot join team when not playing.");
 		}
 
 		// Setup team
@@ -865,16 +948,14 @@ public class Client {
 
 		// Player numbers (if valid)
 		@SuppressWarnings("unchecked")
-		Map<String, Integer> playerNumbers = (Map<String, Integer>) message
-				.get("playerNumbers");
+		Map<String, Integer> playerNumbers = (Map<String, Integer>) message.get("playerNumbers");
 		if (playerNumbers != null) {
 			replacePlayerNumbers(playerNumbers);
 		}
 
 		// Missing players (if valid)
 		@SuppressWarnings("unchecked")
-		Iterable<String> missingPlayers = (Iterable<String>) message
-				.get("missingPlayers");
+		Iterable<String> missingPlayers = (Iterable<String>) message.get("missingPlayers");
 		if (missingPlayers != null) {
 			setMissingPlayers(missingPlayers);
 		}
@@ -900,28 +981,21 @@ public class Client {
 	 * Helpers
 	 */
 
-	protected void publish(String routingKey, Map<String, Object> message,
-			BasicProperties props) throws IOException {
-		channel.basicPublish(getGameID(), routingKey, props,
-				prepareMessage(message));
+	protected void publish(String routingKey, Map<String, Object> message, BasicProperties props) throws IOException {
+		channel.basicPublish(getGameID(), routingKey, props, prepareMessage(message));
 	}
 
-	protected void publish(String routingKey, Map<String, Object> message)
-			throws IOException {
+	protected void publish(String routingKey, Map<String, Object> message) throws IOException {
 		publish(routingKey, message, defaultProps().build());
 	}
 
-	protected void reply(BasicProperties requestProps,
-			Map<String, Object> message) throws IOException {
-		BasicProperties props = defaultProps().correlationId(
-				requestProps.getCorrelationId()).build();
-		channel.basicPublish("", requestProps.getReplyTo(), props,
-				prepareMessage(message));
+	protected void reply(BasicProperties requestProps, Map<String, Object> message) throws IOException {
+		BasicProperties props = defaultProps().correlationId(requestProps.getCorrelationId()).build();
+		channel.basicPublish("", requestProps.getReplyTo(), props, prepareMessage(message));
 	}
 
 	private AMQP.BasicProperties.Builder defaultProps() {
-		return new AMQP.BasicProperties.Builder().timestamp(new Date())
-				.contentType("text/plain").deliveryMode(1);
+		return new AMQP.BasicProperties.Builder().timestamp(new Date()).contentType("text/plain").deliveryMode(1);
 	}
 
 	protected Map<String, Object> newMessage() {
@@ -966,8 +1040,7 @@ public class Client {
 		}
 
 		@Override
-		public void handleResponse(Map<String, Object> message,
-				BasicProperties props) {
+		public void handleResponse(Map<String, Object> message, BasicProperties props) {
 			// Ignore when done
 			if (isDone)
 				return;
@@ -1070,8 +1143,7 @@ public class Client {
 		}
 
 		@Override
-		public void handleMessage(String topic, Map<String, Object> message,
-				BasicProperties props) throws IOException {
+		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
 			// Read player info
 			String clientID = (String) message.get("clientID");
 			String playerID = (String) message.get("playerID");
@@ -1125,8 +1197,7 @@ public class Client {
 		}
 
 		@Override
-		public void handleMessage(String topic, Map<String, Object> message,
-				BasicProperties props) throws IOException {
+		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
 			String playerID = (String) message.get("playerID");
 			if (topic.equals("ready")) {
 				// Handle player ready
@@ -1154,6 +1225,9 @@ public class Client {
 			} else if (topic.equals("found")) {
 				// Handle object found
 				handler.playerFoundObject(playerID);
+			} else if (topic.equals("heartbeat")) {
+				// Handle heartbeat
+				heartbeatReceived(playerID);
 			}
 		}
 
