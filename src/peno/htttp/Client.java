@@ -463,7 +463,7 @@ public class Client {
 	 * 
 	 * @throws IllegalStateException
 	 *             If not joined, if already started, if unable to start or if
-	 *             player numbers not rolled yet.
+	 *             player numbers not determined yet.
 	 * @throws IOException
 	 */
 	public void start() throws IllegalStateException, IOException {
@@ -476,8 +476,9 @@ public class Client {
 		if (!canStart()) {
 			throw new IllegalStateException("Cannot start the game.");
 		}
-		if (!isRolled()) {
-			throw new IllegalStateException("Player numbers not rolled yet.");
+		if (!hasPlayerNumber()) {
+			throw new IllegalStateException(
+					"Player numbers not determined yet.");
 		}
 
 		// Publish
@@ -581,29 +582,28 @@ public class Client {
 	 * Get the local player's number to identify its object.
 	 * 
 	 * @throws IllegalStateException
-	 *             If not rolled yet.
+	 *             If not determined yet.
 	 */
 	public int getPlayerNumber() throws IllegalStateException {
-		if (!isRolled()) {
-			throw new IllegalStateException("Player number not rolled yet.");
+		if (!hasPlayerNumber()) {
+			throw new IllegalStateException("Player number not determined yet.");
 		}
 		return playerNumbers.get(getPlayerID());
 	}
 
 	/**
-	 * Check if the player numbers have been rolled.
+	 * Check if the player numbers have been determined.
 	 */
-	public boolean isRolled() {
+	public boolean hasPlayerNumber() {
 		return playerNumbers.size() == nbPlayers;
 	}
 
 	/**
 	 * Roll for player numbers.
 	 * 
-	 * 
 	 * @throws IllegalStateException
 	 *             If not joined, if already started, if unable to start or if
-	 *             player numbers already rolled.
+	 *             player numbers already determined.
 	 * @throws IOException
 	 */
 	protected void roll() throws IOException {
@@ -616,7 +616,7 @@ public class Client {
 		if (!canStart()) {
 			throw new IllegalStateException("Cannot start the game.");
 		}
-		if (isRolled()) {
+		if (hasPlayerNumber()) {
 			throw new IllegalStateException(
 					"Already rolled for player numbers.");
 		}
@@ -635,7 +635,7 @@ public class Client {
 	 * @throws IOException
 	 */
 	protected boolean tryRoll() throws IOException {
-		if (isJoined() && !isPlaying() && canStart() && !isRolled()) {
+		if (isJoined() && !isPlaying() && canStart() && !hasPlayerNumber()) {
 			roll();
 			return true;
 		}
@@ -672,7 +672,7 @@ public class Client {
 		}
 
 		// Check if done
-		if (!isRolled() && playerRolls.size() == nbPlayers) {
+		if (!hasPlayerNumber() && playerRolls.size() == nbPlayers) {
 			// Sort rolls and retrieve player numbers
 			sortPlayerRolls();
 			// Call handler
@@ -886,7 +886,7 @@ public class Client {
 			message.put("gameState", getGameState().name());
 		}
 		// Player numbers
-		if (isRolled()) {
+		if (hasPlayerNumber()) {
 			message.put("playerNumbers", playerNumbers);
 		}
 		// Missing players
