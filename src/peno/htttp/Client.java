@@ -84,8 +84,9 @@ public class Client {
 		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
-		this.localPlayer = new PlayerInfo(UUID.randomUUID().toString(),
-				playerID, false);
+
+		String clientID = UUID.randomUUID().toString();
+		this.localPlayer = new PlayerInfo(clientID, playerID);
 
 		setup();
 	}
@@ -199,17 +200,16 @@ public class Client {
 		synchronized (players) {
 			PlayerInfo player = players.getVoted(clientID, playerID);
 			if (player == null) {
-				player = new PlayerInfo(clientID, playerID, isReady);
-			} else {
-				player.setReady(isReady);
+				player = new PlayerInfo(clientID, playerID);
 			}
+			player.setReady(isReady);
 			players.confirm(player);
 		}
 	}
 
-	private void votePlayer(String clientID, String playerID, boolean isReady) {
+	private void votePlayer(String clientID, String playerID) {
 		synchronized (players) {
-			players.vote(new PlayerInfo(clientID, playerID, isReady));
+			players.vote(new PlayerInfo(clientID, playerID));
 		}
 	}
 
@@ -977,10 +977,15 @@ public class Client {
 				// Accepted by peer
 				String clientID = (String) message.get("clientID");
 				String playerID = (String) message.get("playerID");
-				Boolean isReady = (Boolean) message.get("isReady");
+				boolean isReady = (Boolean) message.get("isReady");
+				boolean isJoined = (Boolean) message.get("isJoined");
 
 				// Store player
-				confirmPlayer(clientID, playerID, isReady);
+				if (isJoined) {
+					confirmPlayer(clientID, playerID, isReady);
+				} else {
+					votePlayer(clientID, playerID);
+				}
 
 				// Read game state
 				readGameState(message);
@@ -1085,13 +1090,13 @@ public class Client {
 				reply.put("result", isAccepted);
 
 				// Store player
-				boolean isReady = (Boolean) message.get("isReady");
-				votePlayer(clientID, playerID, isReady);
+				votePlayer(clientID, playerID);
 
 				if (isAccepted) {
 					// Report own player info
-					reply.put("clientID", getClientID());
+					reply.put("clientID", playerInfo.getClientID());
 					reply.put("isReady", playerInfo.isReady());
+					reply.put("isJoined", isJoined());
 					// Report game state
 					writeGameState(reply);
 				}

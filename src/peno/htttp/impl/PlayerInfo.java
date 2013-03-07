@@ -6,10 +6,9 @@ public class PlayerInfo {
 	private final String playerID;
 	private boolean isReady;
 
-	public PlayerInfo(String clientID, String playerID, boolean isReady) {
+	public PlayerInfo(String clientID, String playerID) {
 		this.clientID = clientID;
 		this.playerID = playerID;
-		setReady(isReady);
 	}
 
 	public String getClientID() {
