@@ -64,10 +64,6 @@ public abstract class Requester extends Consumer {
 			timeoutFuture.cancel(false);
 			timeoutFuture = null;
 		}
-		// Cancel consumer
-		if (getConsumerTag() != null) {
-			getChannel().basicCancel(getConsumerTag());
-		}
 	}
 
 	@Override
