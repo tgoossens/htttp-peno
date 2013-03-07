@@ -7,12 +7,43 @@ import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.tools.json.JSONReader;
 
 public abstract class Consumer extends DefaultConsumer {
 
-	public Consumer(Channel channel) {
+	private final String queue;
+
+	public Consumer(Channel channel, String queue) throws IOException {
 		super(channel);
+		this.queue = queue;
+
+		// Consume queue
+		channel.basicConsume(queue, true, this);
+	}
+
+	public Consumer(Channel channel) throws IOException {
+		this(channel, channel.queueDeclare().getQueue());
+	}
+
+	protected String getQueue() {
+		return queue;
+	}
+
+	public void bind(String exchange, String routingKey) throws IOException {
+		getChannel().queueBind(getQueue(), exchange, routingKey);
+	}
+
+	public void unbind(String exchange, String routingKey) throws IOException {
+		getChannel().queueUnbind(getQueue(), exchange, routingKey);
+	}
+
+	public void terminate() {
+		try {
+			getChannel().queueDelete(getQueue());
+		} catch (IOException | ShutdownSignalException e) {
+			// Ignore
+		}
 	}
 
 	@Override

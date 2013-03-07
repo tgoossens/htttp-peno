@@ -80,7 +80,7 @@ public class PlayerRegister {
 	 */
 	public void remove(String clientID, String playerID) {
 		// Remove confirmed player if needed
-		if (hasConfirmed(clientID, playerID)) {
+		if (isConfirmed(clientID, playerID)) {
 			confirmed.remove(playerID);
 		}
 
@@ -112,7 +112,7 @@ public class PlayerRegister {
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	public boolean hasConfirmed(String clientID, String playerID) {
+	public boolean isConfirmed(String clientID, String playerID) {
 		return hasConfirmed(playerID)
 				&& getConfirmed(playerID).getClientID().equals(clientID);
 	}
@@ -146,7 +146,7 @@ public class PlayerRegister {
 		// Check if colliding with confirmed player
 		if (hasConfirmed(playerID)) {
 			// Needs to match the confirmed player
-			return hasConfirmed(clientID, playerID);
+			return isConfirmed(clientID, playerID);
 		}
 
 		// Check if already voted for given player

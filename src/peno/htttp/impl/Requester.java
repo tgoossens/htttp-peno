@@ -20,7 +20,8 @@ public abstract class Requester extends Consumer {
 	private String requestId;
 	private ScheduledFuture<?> timeoutFuture;
 
-	public Requester(Channel channel, RequestProvider provider) {
+	public Requester(Channel channel, RequestProvider provider)
+			throws IOException {
 		super(channel);
 		this.provider = provider;
 		this.executor = Executors.newSingleThreadScheduledExecutor();
@@ -36,16 +37,12 @@ public abstract class Requester extends Consumer {
 		// Cancel any running requests
 		cancelRequest();
 
-		// Declare reply consumer
-		String replyQueue = provider.getQueue();
-		getChannel().basicConsume(replyQueue, true, this);
-
 		// Create request
 		requestId = "" + provider.nextRequestId();
 		AMQP.BasicProperties props = new AMQP.BasicProperties().builder()
 				.timestamp(new Date()).contentType("text/plain")
 				.deliveryMode(1).expiration(timeout + "")
-				.correlationId(requestId).replyTo(replyQueue).build();
+				.correlationId(requestId).replyTo(getQueue()).build();
 
 		// Publish
 		getChannel().basicPublish(exchange, topic, props, message);

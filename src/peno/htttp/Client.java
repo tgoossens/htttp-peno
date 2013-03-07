@@ -44,9 +44,9 @@ public class Client {
 	private Channel channel;
 	private RequestProvider requestProvider;
 	private final Handler handler;
-	private String joinQueue;
-	private String publicQueue;
-	private String teamQueue;
+	private Consumer joinConsumer;
+	private Consumer publicConsumer;
+	private Consumer teamConsumer;
 
 	/*
 	 * Identifiers
@@ -181,7 +181,7 @@ public class Client {
 
 	private boolean hasPlayer(String clientID, String playerID) {
 		synchronized (players) {
-			return players.hasConfirmed(clientID, playerID);
+			return players.isConfirmed(clientID, playerID);
 		}
 	}
 
@@ -789,57 +789,41 @@ public class Client {
 		resetGame();
 		// Create channel
 		channel = connection.createChannel();
-		requestProvider = new RequestProvider(channel);
+		requestProvider = new RequestProvider();
 		// Declare exchange
 		channel.exchangeDeclare(getGameID(), "topic");
 	}
 
 	private void setupJoin() throws IOException {
-		// Declare and bind
-		joinQueue = channel.queueDeclare().getQueue();
-		channel.queueBind(joinQueue, getGameID(), "*");
-
-		// Attach consumers
-		channel.basicConsume(joinQueue, true, new JoinLeaveHandler(channel));
+		joinConsumer = new JoinLeaveConsumer(channel);
+		joinConsumer.bind(getGameID(), "*");
 	}
 
-	private void shutdownJoin() throws IOException {
-		shutdownQueue(joinQueue);
+	private void shutdownJoin() {
+		if (joinConsumer != null) {
+			joinConsumer.terminate();
+		}
 	}
 
 	private void setupPublic() throws IOException {
-		// Declare and bind
-		publicQueue = channel.queueDeclare().getQueue();
-		channel.queueBind(publicQueue, getGameID(), "*");
-
-		// Attach consumers
-		channel.basicConsume(publicQueue, true, new PublicHandler(channel));
+		publicConsumer = new PublicConsumer(channel);
+		publicConsumer.bind(getGameID(), "*");
 	}
 
 	private void shutdownPublic() throws IOException {
-		shutdownQueue(publicQueue);
+		if (publicConsumer != null) {
+			publicConsumer.terminate();
+		}
 	}
 
 	private void setupTeam(int teamId) throws IOException {
-		// Declare and bind
-		teamQueue = channel.queueDeclare().getQueue();
-		channel.queueBind(teamQueue, getGameID(), "team." + teamId + ".*");
-
-		// TODO Attach consumers
+		teamConsumer = new JoinLeaveConsumer(channel);
+		teamConsumer.bind(getGameID(), "team." + teamId + ".*");
 	}
 
 	private void shutdownTeam() throws IOException {
-		shutdownQueue(teamQueue);
-	}
-
-	private void shutdownQueue(String queue) throws IOException {
-		// Delete queue (also cancels attached consumers)
-		if (queue != null) {
-			try {
-				channel.queueDelete(queue);
-			} catch (IOException | ShutdownSignalException e) {
-				// Ignore
-			}
+		if (teamConsumer != null) {
+			teamConsumer.terminate();
 		}
 	}
 
@@ -967,7 +951,7 @@ public class Client {
 		private final Callback<Void> callback;
 		private volatile boolean isDone = false;
 
-		public JoinRequester(Callback<Void> callback) {
+		public JoinRequester(Callback<Void> callback) throws IOException {
 			super(channel, requestProvider);
 			this.callback = callback;
 		}
@@ -1074,9 +1058,9 @@ public class Client {
 	/**
 	 * Handles join requests.
 	 */
-	private class JoinLeaveHandler extends Consumer {
+	private class JoinLeaveConsumer extends Consumer {
 
-		public JoinLeaveHandler(Channel channel) {
+		public JoinLeaveConsumer(Channel channel) throws IOException {
 			super(channel);
 		}
 
@@ -1129,9 +1113,9 @@ public class Client {
 	/**
 	 * Handles public broadcasts.
 	 */
-	private class PublicHandler extends Consumer {
+	private class PublicConsumer extends Consumer {
 
-		public PublicHandler(Channel channel) {
+		public PublicConsumer(Channel channel) throws IOException {
 			super(channel);
 		}
 
