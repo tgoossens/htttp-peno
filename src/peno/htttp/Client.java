@@ -379,6 +379,8 @@ public class Client {
 		case WAITING:
 			// Remove player
 			removePlayer(clientID, playerID);
+			// Invalidate player numbers
+			clearPlayerNumbers();
 			break;
 		case PLAYING:
 		case PAUSED:
