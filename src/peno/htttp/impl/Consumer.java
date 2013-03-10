@@ -47,16 +47,15 @@ public abstract class Consumer extends DefaultConsumer {
 	}
 
 	@Override
-	public void handleDelivery(String consumerTag, Envelope envelope,
-			BasicProperties props, byte[] body) throws IOException {
+	public void handleDelivery(String consumerTag, Envelope envelope, BasicProperties props, byte[] body)
+			throws IOException {
 		String topic = envelope.getRoutingKey();
 		Map<String, Object> message = parseMessage(body);
 
 		handleMessage(topic, message, props);
 	}
 
-	public abstract void handleMessage(String topic,
-			Map<String, Object> message, BasicProperties props)
+	public abstract void handleMessage(String topic, Map<String, Object> message, BasicProperties props)
 			throws IOException;
 
 	private static JSONReader jsonReader = new JSONReader();

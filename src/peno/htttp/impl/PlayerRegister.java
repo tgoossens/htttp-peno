@@ -113,8 +113,7 @@ public class PlayerRegister {
 	 *            The player identifier.
 	 */
 	public boolean isConfirmed(String clientID, String playerID) {
-		return hasConfirmed(playerID)
-				&& getConfirmed(playerID).getClientID().equals(clientID);
+		return hasConfirmed(playerID) && getConfirmed(playerID).getClientID().equals(clientID);
 	}
 
 	/**

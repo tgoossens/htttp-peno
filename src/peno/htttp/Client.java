@@ -12,9 +12,11 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import peno.htttp.impl.Consumer;
+import peno.htttp.impl.NamedThreadFactory;
 import peno.htttp.impl.PlayerInfo;
 import peno.htttp.impl.PlayerRegister;
 import peno.htttp.impl.PlayerRoll;
@@ -71,10 +73,11 @@ public class Client {
 	private final Map<String, PlayerRoll> playerRolls = new HashMap<String, PlayerRoll>();
 
 	/*
-	 * Heartbeat
+	 * Heart beat
 	 */
-	private final ScheduledExecutorService executor;
+	private ScheduledExecutorService heartbeatExecutor;
 	private ScheduledFuture<?> heartbeatTask;
+	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
 
 	/**
 	 * Create a game client.
@@ -96,8 +99,6 @@ public class Client {
 
 		String clientID = UUID.randomUUID().toString();
 		this.localPlayer = new PlayerInfo(clientID, playerID);
-
-		this.executor = Executors.newSingleThreadScheduledExecutor();
 
 		setup();
 	}
@@ -183,12 +184,6 @@ public class Client {
 	 */
 	public boolean isFull() {
 		return getNbPlayers() >= nbPlayers;
-	}
-
-	private boolean hasPlayer(String playerID) {
-		synchronized (players) {
-			return players.hasConfirmed(playerID);
-		}
 	}
 
 	private boolean hasPlayer(String clientID, String playerID) {
@@ -343,6 +338,9 @@ public class Client {
 	public void leave() throws IOException {
 		// Reset game
 		resetGame();
+		// Stop request provider
+		requestProvider.terminate();
+		requestProvider = null;
 		try {
 			// Shut down queues
 			shutdownJoin();
@@ -364,7 +362,6 @@ public class Client {
 			} catch (IOException | ShutdownSignalException e) {
 			} finally {
 				channel = null;
-				requestProvider = null;
 			}
 		}
 	}
@@ -384,7 +381,7 @@ public class Client {
 			break;
 		case PLAYING:
 		case PAUSED:
-			if (hasPlayer(playerID)) {
+			if (hasPlayer(clientID, playerID)) {
 				// Player went missing
 				setMissingPlayer(playerID);
 				// Paused
@@ -776,14 +773,26 @@ public class Client {
 		// Stop if still running
 		heartbeatStop();
 
+		// Setup executor
+		heartbeatExecutor = Executors.newScheduledThreadPool(1, heartbeatFactory);
+
 		// Start beating
-		heartbeatTask = executor.scheduleAtFixedRate(new HeartbeatTask(), 0, heartbeatFrequency, TimeUnit.MILLISECONDS);
+		heartbeatTask = heartbeatExecutor.scheduleAtFixedRate(new HeartbeatTask(), 0, heartbeatFrequency,
+				TimeUnit.MILLISECONDS);
 	}
 
 	protected void heartbeatStop() {
+		// Cancel task
 		if (heartbeatTask != null) {
 			heartbeatTask.cancel(false);
 			heartbeatTask = null;
+		}
+		// Shut down executor
+		if (heartbeatExecutor != null) {
+			if (!heartbeatExecutor.isShutdown()) {
+				heartbeatExecutor.shutdown();
+			}
+			heartbeatExecutor = null;
 		}
 	}
 
@@ -872,11 +881,14 @@ public class Client {
 	private void setup() throws IOException {
 		// Reset game
 		resetGame();
+
 		// Create channel
 		channel = connection.createChannel();
-		requestProvider = new RequestProvider();
 		// Declare exchange
 		channel.exchangeDeclare(getGameID(), "topic");
+
+		// Setup request provider
+		requestProvider = new RequestProvider();
 	}
 
 	private void setupJoin() throws IOException {
@@ -902,28 +914,13 @@ public class Client {
 	}
 
 	private void setupTeam(int teamId) throws IOException {
-		teamConsumer = new JoinLeaveConsumer(channel);
+		teamConsumer = new TeamConsumer(channel);
 		teamConsumer.bind(getGameID(), "team." + teamId + ".*");
 	}
 
 	private void shutdownTeam() throws IOException {
 		if (teamConsumer != null) {
 			teamConsumer.terminate();
-		}
-	}
-
-	/**
-	 * Shutdown this client.
-	 * 
-	 * <p>
-	 * Leave the game and then close the opened channel.
-	 * </p>
-	 */
-	public void shutdown() {
-		try {
-			// Leave the game
-			leave();
-		} catch (IOException e) {
 		}
 	}
 
@@ -1231,6 +1228,23 @@ public class Client {
 				// Handle heartbeat
 				heartbeatReceived(playerID);
 			}
+		}
+
+	}
+
+	/**
+	 * Handles team-specific messages.
+	 */
+	private class TeamConsumer extends Consumer {
+
+		public TeamConsumer(Channel channel) throws IOException {
+			super(channel);
+		}
+
+		@Override
+		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
+			// TODO Auto-generated method stub
+
 		}
 
 	}
