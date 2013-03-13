@@ -298,6 +298,7 @@ public class Client {
 			// Only missing players can join
 			return isMissingPlayer(playerID);
 		case JOINING:
+		case STARTING:
 		case WAITING:
 			// Reject duplicate players
 			if (!players.canJoin(clientID, playerID))
@@ -314,13 +315,17 @@ public class Client {
 	private void joined() throws IOException {
 		// Setup public queue
 		setupPublic();
+		// Try to roll
+		tryRoll();
 	}
 
-	private void playerJoined(String clientID, String playerID, boolean isReady) {
+	private void playerJoined(String clientID, String playerID, boolean isReady) throws IOException {
 		// Confirm player
 		confirmPlayer(clientID, playerID, isReady);
 		// Report
 		handler.playerJoined(playerID);
+		// Try to roll
+		tryRoll();
 	}
 
 	/**
@@ -374,6 +379,9 @@ public class Client {
 
 		switch (getGameState()) {
 		case WAITING:
+		case STARTING:
+			// Revert to waiting
+			setGameState(GameState.WAITING);
 			// Remove player
 			removePlayer(clientID, playerID);
 			// Invalidate player numbers
@@ -416,7 +424,7 @@ public class Client {
 	 */
 	public boolean canStart() {
 		switch (getGameState()) {
-		case WAITING:
+		case STARTING:
 		case PAUSED:
 			// Game must be full
 			if (!isFull())
@@ -463,11 +471,11 @@ public class Client {
 		getPlayer(playerID).setReady(isReady);
 
 		if (isReady) {
-			// Try to start rolling
-			tryRoll();
-		} else if (getGameState() == GameState.WAITING) {
-			// Clear rolls when not ready while waiting
-			clearPlayerNumbers();
+			// Try to start
+			tryStart();
+		} else {
+			// TODO Should we pause here when playing?
+			// Related: should we replace pause() with setReady(false)?
 		}
 	}
 
@@ -479,7 +487,7 @@ public class Client {
 	 *             player numbers not determined yet.
 	 * @throws IOException
 	 */
-	public void start() throws IllegalStateException, IOException {
+	protected void start() throws IllegalStateException, IOException {
 		if (!isJoined()) {
 			throw new IllegalStateException("Not joined in the game.");
 		}
@@ -495,6 +503,12 @@ public class Client {
 
 		// Publish
 		publish("start", null);
+	}
+
+	private void tryStart() throws IOException {
+		if (isJoined() && !isPlaying() && canStart() && hasPlayerNumber()) {
+			start();
+		}
 	}
 
 	private synchronized void started() {
@@ -607,15 +621,29 @@ public class Client {
 	 * Check if the player numbers have been determined.
 	 */
 	public boolean hasPlayerNumber() {
-		return playerNumbers.size() == nbPlayers;
+		switch (getGameState()) {
+		case PAUSED:
+		case PLAYING:
+		case STARTING:
+			return (playerNumbers.size() == nbPlayers);
+		default:
+			return false;
+		}
+	}
+
+	/**
+	 * Check if the player numbers can be rolled.
+	 */
+	public boolean canRoll() {
+		return getGameState() == GameState.WAITING && isFull();
 	}
 
 	/**
 	 * Roll for player numbers.
 	 * 
 	 * @throws IllegalStateException
-	 *             If not joined, if already started, if unable to start or if
-	 *             player numbers already determined.
+	 *             If not joined, if already rolled or started or if not all
+	 *             players have joined yet.
 	 * @throws IOException
 	 */
 	protected void roll() throws IOException {
@@ -625,11 +653,11 @@ public class Client {
 		if (isPlaying()) {
 			throw new IllegalStateException("Game already started.");
 		}
-		if (!canStart()) {
-			throw new IllegalStateException("Cannot start the game.");
-		}
 		if (hasPlayerNumber()) {
 			throw new IllegalStateException("Already rolled for player numbers.");
+		}
+		if (!canRoll()) {
+			throw new IllegalStateException("Not all players have joined yet.");
 		}
 
 		// Roll own number if needed
@@ -641,16 +669,14 @@ public class Client {
 	}
 
 	/**
-	 * Attempt to start the game.
+	 * Attempt to roll for player numbers.
 	 * 
 	 * @throws IOException
 	 */
-	protected boolean tryRoll() throws IOException {
-		if (isJoined() && !isPlaying() && canStart() && !hasPlayerNumber()) {
+	protected void tryRoll() throws IOException {
+		if (isJoined() && !isPlaying() && !hasPlayerNumber() && canRoll()) {
 			roll();
-			return true;
 		}
-		return false;
 	}
 
 	private boolean hasRolledOwn() {
@@ -686,6 +712,8 @@ public class Client {
 		if (!hasPlayerNumber() && playerRolls.size() == nbPlayers) {
 			// Sort rolls and retrieve player numbers
 			sortPlayerRolls();
+			// Set as starting
+			setGameState(GameState.STARTING);
 			// Call handler
 			handler.gameRolled(getPlayerNumber());
 		}
@@ -1181,6 +1209,10 @@ public class Client {
 			} else if (topic.equals("leave")) {
 				// Handle player left
 				playerLeft(clientID, playerID);
+			} else if (topic.equals("roll")) {
+				// Handle roll
+				int roll = (Integer) message.get("roll");
+				rollReceived(playerID, roll);
 			}
 		}
 
@@ -1211,10 +1243,6 @@ public class Client {
 			} else if (topic.equals("pause")) {
 				// Handle paused
 				paused();
-			} else if (topic.equals("roll")) {
-				// Handle roll
-				int roll = (Integer) message.get("roll");
-				rollReceived(playerID, roll);
 			} else if (topic.equals("position")) {
 				// Handle position update
 				double x = ((Number) message.get("x")).doubleValue();
