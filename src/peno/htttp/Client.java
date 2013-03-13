@@ -319,7 +319,7 @@ public class Client {
 	private void playerJoined(String clientID, String playerID, boolean isReady) {
 		// Confirm player
 		confirmPlayer(clientID, playerID, isReady);
-		// Report
+		// Call handler
 		handler.playerJoined(playerID);
 	}
 
@@ -367,7 +367,7 @@ public class Client {
 	}
 
 	private void playerLeft(String clientID, String playerID) {
-		// Report
+		// Call handler if confirmed
 		if (hasPlayer(clientID, playerID)) {
 			handler.playerLeft(playerID);
 		}
@@ -461,6 +461,8 @@ public class Client {
 	private void playerReady(String playerID, boolean isReady) throws IOException {
 		// Set ready state
 		getPlayer(playerID).setReady(isReady);
+		// Call handler
+		handler.playerReady(playerID, isReady);
 
 		if (isReady) {
 			// Try to start rolling
