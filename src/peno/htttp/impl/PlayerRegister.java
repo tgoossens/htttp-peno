@@ -64,10 +64,8 @@ public class PlayerRegister {
 		}
 		clients.put(clientID, player);
 
-		// Remove missing
-		if (missing.contains(playerID)) {
-			missing.remove(playerID);
-		}
+		// Remove from missing
+		missing.remove(playerID);
 	}
 
 	/**

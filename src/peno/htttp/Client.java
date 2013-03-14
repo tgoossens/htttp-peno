@@ -83,7 +83,7 @@ public class Client {
 	 * Create a game client.
 	 * 
 	 * @param connection
-	 *            The AMPQ connection for communication.
+	 *            The AMQP connection for communication.
 	 * @param handler
 	 *            The event handler which listens to this client.
 	 * @param gameID
@@ -99,8 +99,6 @@ public class Client {
 
 		String clientID = UUID.randomUUID().toString();
 		this.localPlayer = new PlayerInfo(clientID, playerID);
-
-		setup();
 	}
 
 	/**
@@ -322,7 +320,7 @@ public class Client {
 	private void playerJoined(String clientID, String playerID, boolean isReady) throws IOException {
 		// Confirm player
 		confirmPlayer(clientID, playerID, isReady);
-		// Report
+		// Call handler
 		handler.playerJoined(playerID);
 		// Try to roll
 		tryRoll();
@@ -364,7 +362,8 @@ public class Client {
 			try {
 				// Shut down channel
 				channel.close();
-			} catch (IOException | ShutdownSignalException e) {
+			} catch (IOException e) {
+			} catch (ShutdownSignalException e) {
 			} finally {
 				channel = null;
 			}
@@ -372,7 +371,7 @@ public class Client {
 	}
 
 	private void playerLeft(String clientID, String playerID) {
-		// Report
+		// Call handler if confirmed
 		if (hasPlayer(clientID, playerID)) {
 			handler.playerLeft(playerID);
 		}
@@ -455,7 +454,7 @@ public class Client {
 	 * @throws IOException
 	 */
 	public void setReady(boolean isReady) throws IOException {
-		if (isReady != getLocalPlayer().isReady()) {
+		if (isReady != isReady()) {
 			// Publish updated state
 			Map<String, Object> message = newMessage();
 			message.put("isReady", isReady);
@@ -469,6 +468,8 @@ public class Client {
 	private void playerReady(String playerID, boolean isReady) throws IOException {
 		// Set ready state
 		getPlayer(playerID).setReady(isReady);
+		// Call handler
+		handler.playerReady(playerID, isReady);
 
 		if (isReady) {
 			// Try to start
@@ -1203,14 +1204,14 @@ public class Client {
 				// Send reply
 				reply(props, reply);
 			} else if (topic.equals("joined")) {
-				// Handle player joined
+				// Player joined
 				boolean isReady = (Boolean) message.get("isReady");
 				playerJoined(clientID, playerID, isReady);
 			} else if (topic.equals("leave")) {
-				// Handle player left
+				// Player left
 				playerLeft(clientID, playerID);
 			} else if (topic.equals("roll")) {
-				// Handle roll
+				// Player rolled their number
 				int roll = (Integer) message.get("roll");
 				rollReceived(playerID, roll);
 			}
@@ -1231,29 +1232,29 @@ public class Client {
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
 			String playerID = (String) message.get("playerID");
 			if (topic.equals("ready")) {
-				// Handle player ready
+				// Player ready
 				boolean isReady = (Boolean) message.get("isReady");
 				playerReady(playerID, isReady);
 			} else if (topic.equals("start")) {
-				// Handle start
+				// Game started
 				started();
 			} else if (topic.equals("stop")) {
-				// Handle stopped
+				// Game stopped
 				stopped();
 			} else if (topic.equals("pause")) {
-				// Handle paused
+				// Game paused
 				paused();
 			} else if (topic.equals("position")) {
-				// Handle position update
+				// Player updated their position
 				double x = ((Number) message.get("x")).doubleValue();
 				double y = ((Number) message.get("y")).doubleValue();
 				double angle = ((Number) message.get("angle")).doubleValue();
 				handler.playerPosition(playerID, x, y, angle);
 			} else if (topic.equals("found")) {
-				// Handle object found
+				// Player found their object
 				handler.playerFoundObject(playerID);
 			} else if (topic.equals("heartbeat")) {
-				// Handle heartbeat
+				// Heartbeat
 				heartbeatReceived(playerID);
 			}
 		}

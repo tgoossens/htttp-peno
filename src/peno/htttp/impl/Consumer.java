@@ -41,8 +41,8 @@ public abstract class Consumer extends DefaultConsumer {
 	public void terminate() {
 		try {
 			getChannel().queueDelete(getQueue());
-		} catch (IOException | ShutdownSignalException e) {
-			// Ignore
+		} catch (IOException e) {
+		} catch (ShutdownSignalException e) {
 		}
 	}
 
@@ -58,11 +58,9 @@ public abstract class Consumer extends DefaultConsumer {
 	public abstract void handleMessage(String topic, Map<String, Object> message, BasicProperties props)
 			throws IOException;
 
-	private static JSONReader jsonReader = new JSONReader();
-
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> parseMessage(byte[] body) {
-		return (Map<String, Object>) jsonReader.read(new String(body));
+		return (Map<String, Object>) new JSONReader().read(new String(body));
 	}
 
 }

@@ -53,6 +53,16 @@ public interface Handler {
 	public void playerLeft(String playerID);
 
 	/**
+	 * Invoked when a player changes his ready state.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 * @param isReady
+	 *            The player's new ready state.
+	 */
+	public void playerReady(String playerID, boolean isReady);
+
+	/**
 	 * Invoked when a player updates its position.
 	 * 
 	 * @param playerID
