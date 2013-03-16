@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import peno.htttp.impl.Consumer;
 import peno.htttp.impl.NamedThreadFactory;
-import peno.htttp.impl.PlayerInfo;
+import peno.htttp.impl.PlayerState;
 import peno.htttp.impl.PlayerRegister;
 import peno.htttp.impl.PlayerRoll;
 import peno.htttp.impl.RequestProvider;
@@ -31,9 +31,9 @@ import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.tools.json.JSONWriter;
 
 /**
- * A client for communicating over the HTTTP protocol.
+ * A client for playing a game over the HTTTP protocol.
  */
-public class Client {
+public class PlayerClient {
 
 	/*
 	 * Constants
@@ -49,7 +49,7 @@ public class Client {
 	private final Connection connection;
 	private Channel channel;
 	private RequestProvider requestProvider;
-	private final Handler handler;
+	private final PlayerHandler handler;
 	private Consumer joinConsumer;
 	private Consumer publicConsumer;
 	private Consumer teamConsumer;
@@ -63,7 +63,7 @@ public class Client {
 	 * Game state
 	 */
 	private volatile GameState gameState = GameState.DISCONNECTED;
-	private final PlayerInfo localPlayer;
+	private final PlayerState localPlayer;
 	private final PlayerRegister players = new PlayerRegister();
 
 	/*
@@ -92,13 +92,14 @@ public class Client {
 	 *            The local player identifier.
 	 * @throws IOException
 	 */
-	public Client(Connection connection, Handler handler, String gameID, String playerID) throws IOException {
+	public PlayerClient(Connection connection, PlayerHandler handler, String gameID, String playerID)
+			throws IOException {
 		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
 
 		String clientID = UUID.randomUUID().toString();
-		this.localPlayer = new PlayerInfo(clientID, playerID);
+		this.localPlayer = new PlayerState(clientID, playerID);
 	}
 
 	/**
@@ -170,7 +171,7 @@ public class Client {
 	public Set<String> getPlayers() {
 		Set<String> playerIDs = new HashSet<String>();
 		synchronized (players) {
-			for (PlayerInfo player : players.getConfirmed()) {
+			for (PlayerState player : players.getConfirmed()) {
 				playerIDs.add(player.getPlayerID());
 			}
 		}
@@ -190,21 +191,21 @@ public class Client {
 		}
 	}
 
-	private PlayerInfo getPlayer(String playerID) {
+	private PlayerState getPlayer(String playerID) {
 		synchronized (players) {
 			return players.getConfirmed(playerID);
 		}
 	}
 
-	private PlayerInfo getLocalPlayer() {
+	private PlayerState getLocalPlayer() {
 		return localPlayer;
 	}
 
 	private void confirmPlayer(String clientID, String playerID, boolean isReady) {
 		synchronized (players) {
-			PlayerInfo player = players.getVoted(clientID, playerID);
+			PlayerState player = players.getVoted(clientID, playerID);
 			if (player == null) {
-				player = new PlayerInfo(clientID, playerID);
+				player = new PlayerState(clientID, playerID);
 			}
 			player.setReady(isReady);
 			players.confirm(player);
@@ -213,7 +214,7 @@ public class Client {
 
 	private void votePlayer(String clientID, String playerID) {
 		synchronized (players) {
-			players.vote(new PlayerInfo(clientID, playerID));
+			players.vote(new PlayerState(clientID, playerID));
 		}
 	}
 
@@ -429,8 +430,8 @@ public class Client {
 			if (!isFull())
 				return false;
 			// All players must be ready
-			for (PlayerInfo playerInfo : players.getConfirmed()) {
-				if (!playerInfo.isReady())
+			for (PlayerState player : players.getConfirmed()) {
+				if (!player.isReady())
 					return false;
 			}
 			return true;
@@ -762,15 +763,16 @@ public class Client {
 	 * @param angle
 	 *            The angle of rotation.
 	 * @throws IllegalStateException
-	 *             If not joined in the game.
+	 *             If not playing.
 	 * @throws IOException
 	 */
 	public void updatePosition(double x, double y, double angle) throws IllegalStateException, IOException {
-		if (!isJoined()) {
-			throw new IllegalStateException("Not joined in the game.");
+		if (!isPlaying()) {
+			throw new IllegalStateException("Cannot update position when not playing.");
 		}
 
 		Map<String, Object> message = newMessage();
+		message.put("playerNumber", getPlayerNumber());
 		message.put("x", x);
 		message.put("y", y);
 		message.put("angle", angle);
@@ -791,7 +793,9 @@ public class Client {
 		}
 
 		// Publish
-		publish("found", null);
+		Map<String, Object> message = newMessage();
+		message.put("playerNumber", getPlayerNumber());
+		publish("found", message);
 	}
 
 	/*
@@ -837,9 +841,9 @@ public class Client {
 	private void heartbeatCheck() throws IOException {
 		final long limit = System.currentTimeMillis() - heartbeatExpiration;
 		// Clone for safe iteration
-		final PlayerInfo[] confirmed = players.getConfirmed().toArray(new PlayerInfo[0]);
+		final PlayerState[] confirmed = players.getConfirmed().toArray(new PlayerState[0]);
 		// Check all confirmed players
-		for (PlayerInfo player : confirmed) {
+		for (PlayerState player : confirmed) {
 			final long lastHeartbeat = player.getLastHeartbeat();
 			if (lastHeartbeat > 0 && lastHeartbeat < limit) {
 				// Heart beat expired, report missing
@@ -848,7 +852,7 @@ public class Client {
 		}
 	}
 
-	private void heartbeatMissing(PlayerInfo player) throws IOException {
+	private void heartbeatMissing(PlayerState player) throws IOException {
 		// Publish leave for player
 		Map<String, Object> message = newMessage();
 		message.put("playerID", player.getPlayerID());
@@ -857,7 +861,7 @@ public class Client {
 	}
 
 	private void heartbeatReceived(String playerID) {
-		PlayerInfo player = getPlayer(playerID);
+		PlayerState player = getPlayer(playerID);
 		if (player != null) {
 			player.setLastHeartbeat(System.currentTimeMillis());
 		}
@@ -1152,10 +1156,10 @@ public class Client {
 		}
 
 		private Map<String, Object> createMessage() {
-			PlayerInfo playerInfo = getLocalPlayer();
+			PlayerState player = getLocalPlayer();
 			Map<String, Object> message = newMessage();
-			message.put("clientID", playerInfo.getClientID());
-			message.put("isReady", playerInfo.isReady());
+			message.put("clientID", player.getClientID());
+			message.put("isReady", player.isReady());
 			return message;
 		}
 
@@ -1182,7 +1186,7 @@ public class Client {
 
 			if (topic.equals("join")) {
 				// Prepare reply
-				PlayerInfo playerInfo = getLocalPlayer();
+				PlayerState player = getLocalPlayer();
 				Map<String, Object> reply = newMessage();
 
 				// Check if accepted
@@ -1194,8 +1198,8 @@ public class Client {
 
 				if (isAccepted) {
 					// Report own player info
-					reply.put("clientID", playerInfo.getClientID());
-					reply.put("isReady", playerInfo.isReady());
+					reply.put("clientID", player.getClientID());
+					reply.put("isReady", player.isReady());
 					reply.put("isJoined", isJoined());
 					// Report game state
 					writeGameState(reply);
@@ -1244,12 +1248,6 @@ public class Client {
 			} else if (topic.equals("pause")) {
 				// Game paused
 				paused();
-			} else if (topic.equals("position")) {
-				// Player updated their position
-				double x = ((Number) message.get("x")).doubleValue();
-				double y = ((Number) message.get("y")).doubleValue();
-				double angle = ((Number) message.get("angle")).doubleValue();
-				handler.playerPosition(playerID, x, y, angle);
 			} else if (topic.equals("found")) {
 				// Player found their object
 				handler.playerFoundObject(playerID);
