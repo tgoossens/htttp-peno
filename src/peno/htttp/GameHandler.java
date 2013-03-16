@@ -29,6 +29,14 @@ public interface GameHandler {
 	public void gamePaused();
 
 	/**
+	 * Invoked when a player attempts to join the game.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void playerJoining(String playerID);
+
+	/**
 	 * Invoked when a player has joined the game.
 	 * 
 	 * @param playerID
@@ -37,12 +45,14 @@ public interface GameHandler {
 	public void playerJoined(String playerID);
 
 	/**
-	 * Invoked when a player has left the game.
+	 * Invoked when a player has disconnected from the game.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
+	 * @param reason
+	 *            The reason for the disconnect.
 	 */
-	public void playerLeft(String playerID);
+	public void playerDisconnected(String playerID, DisconnectReason reason);
 
 	/**
 	 * Invoked when a player changes his ready state.

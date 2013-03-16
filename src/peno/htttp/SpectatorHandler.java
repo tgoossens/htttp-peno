@@ -6,24 +6,6 @@ package peno.htttp;
 public interface SpectatorHandler extends GameHandler {
 
 	/**
-	 * Invoked when a player attempts to join the game.
-	 * 
-	 * @param playerID
-	 *            The player identifier.
-	 */
-	public void playerJoining(String playerID);
-
-	/**
-	 * {@inheritDoc}
-	 * 
-	 * <p>
-	 * Note: this is also called when a player is rejected from the game.
-	 * </p>
-	 */
-	@Override
-	public void playerLeft(String playerID);
-
-	/**
 	 * Invoked when a player updates its position.
 	 * 
 	 * <p>

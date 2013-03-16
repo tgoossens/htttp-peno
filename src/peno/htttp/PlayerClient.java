@@ -340,6 +340,10 @@ public class PlayerClient {
 	 * @throws IOException
 	 */
 	public void leave() throws IOException {
+		disconnect(DisconnectReason.LEAVE);
+	}
+
+	private void disconnect(DisconnectReason reason) throws IOException {
 		// Reset game
 		resetGame();
 		// Stop request provider
@@ -355,7 +359,8 @@ public class PlayerClient {
 			// Publish leave
 			Map<String, Object> message = newMessage();
 			message.put("clientID", getClientID());
-			publish("leave", message);
+			message.put("reason", reason.name());
+			publish("disconnect", message);
 		} catch (IOException e) {
 			throw e;
 		} catch (ShutdownSignalException e) {
@@ -371,11 +376,9 @@ public class PlayerClient {
 		}
 	}
 
-	private void playerLeft(String clientID, String playerID) {
-		// Call handler if confirmed
-		if (hasPlayer(clientID, playerID)) {
-			handler.playerLeft(playerID);
-		}
+	private void playerDisconnected(String clientID, String playerID, DisconnectReason reason) {
+		// Call handler
+		handler.playerDisconnected(playerID, reason);
 
 		switch (getGameState()) {
 		case WAITING:
@@ -452,9 +455,15 @@ public class PlayerClient {
 	 * 
 	 * @param isReady
 	 *            True if the local player is ready.
+	 * @throws IllegalStateException
+	 *             If not joined.
 	 * @throws IOException
 	 */
 	public void setReady(boolean isReady) throws IOException {
+		if (!isJoined()) {
+			throw new IllegalStateException("Not joined in the game.");
+		}
+
 		if (isReady != isReady()) {
 			// Publish updated state
 			Map<String, Object> message = newMessage();
@@ -857,7 +866,8 @@ public class PlayerClient {
 		Map<String, Object> message = newMessage();
 		message.put("playerID", player.getPlayerID());
 		message.put("clientID", player.getClientID());
-		publish("leave", message);
+		message.put("reason", DisconnectReason.TIMEOUT.name());
+		publish("disconnect", message);
 	}
 
 	private void heartbeatReceived(String playerID) {
@@ -1138,8 +1148,8 @@ public class PlayerClient {
 			try {
 				// Cancel request
 				cancel();
-				// Leave
-				leave();
+				// Disconnect
+				disconnect(DisconnectReason.REJECT);
 			} catch (IOException e) {
 				callback.onFailure(e);
 			}
@@ -1188,32 +1198,32 @@ public class PlayerClient {
 				// Prepare reply
 				PlayerState player = getLocalPlayer();
 				Map<String, Object> reply = newMessage();
-
 				// Check if accepted
 				boolean isAccepted = canJoin(clientID, playerID);
 				reply.put("result", isAccepted);
-
 				// Store player
 				votePlayer(clientID, playerID);
-
+				// Add data if accepted
 				if (isAccepted) {
-					// Report own player info
+					// Report own player state
 					reply.put("clientID", player.getClientID());
 					reply.put("isReady", player.isReady());
 					reply.put("isJoined", isJoined());
 					// Report game state
 					writeGameState(reply);
 				}
-
 				// Send reply
 				reply(props, reply);
+				// Call handler
+				handler.playerJoining(playerID);
 			} else if (topic.equals("joined")) {
 				// Player joined
 				boolean isReady = (Boolean) message.get("isReady");
 				playerJoined(clientID, playerID, isReady);
-			} else if (topic.equals("leave")) {
-				// Player left
-				playerLeft(clientID, playerID);
+			} else if (topic.equals("disconnect")) {
+				// Player disconnected
+				DisconnectReason reason = DisconnectReason.valueOf((String) message.get("reason"));
+				playerDisconnected(clientID, playerID, reason);
 			} else if (topic.equals("roll")) {
 				// Player rolled their number
 				int roll = (Integer) message.get("roll");

@@ -117,9 +117,10 @@ public class SpectatorClient {
 			} else if (topic.equals("joined")) {
 				// Player joined
 				handler.playerJoined(playerID);
-			} else if (topic.equals("leave")) {
-				// Player left
-				handler.playerLeft(playerID);
+			} else if (topic.equals("disconnect")) {
+				// Player disconnected
+				DisconnectReason reason = DisconnectReason.valueOf((String) message.get("reason"));
+				handler.playerDisconnected(playerID, reason);
 			} else if (topic.equals("ready")) {
 				// Player ready
 				boolean isReady = (Boolean) message.get("isReady");
