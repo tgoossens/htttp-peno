@@ -9,8 +9,8 @@ import java.util.Set;
 
 public class PlayerRegister {
 
-	private final Map<String, PlayerInfo> confirmed = new HashMap<String, PlayerInfo>();
-	private final Map<String, Map<String, PlayerInfo>> voted = new HashMap<String, Map<String, PlayerInfo>>();
+	private final Map<String, PlayerState> confirmed = new HashMap<String, PlayerState>();
+	private final Map<String, Map<String, PlayerState>> voted = new HashMap<String, Map<String, PlayerState>>();
 	private final Set<String> missing = new HashSet<String>();
 
 	/**
@@ -24,7 +24,7 @@ public class PlayerRegister {
 	 * @param player
 	 *            The player.
 	 */
-	public void confirm(PlayerInfo player) {
+	public void confirm(PlayerState player) {
 		String playerID = player.getPlayerID();
 		String clientID = player.getClientID();
 
@@ -32,7 +32,7 @@ public class PlayerRegister {
 		confirmed.put(playerID, player);
 
 		// Remove from voted
-		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		Map<String, PlayerState> votedClients = voted.get(playerID);
 		if (votedClients != null) {
 			votedClients.remove(clientID);
 		}
@@ -52,14 +52,14 @@ public class PlayerRegister {
 	 * @param player
 	 *            The player.
 	 */
-	public void vote(PlayerInfo player) {
+	public void vote(PlayerState player) {
 		String playerID = player.getPlayerID();
 		String clientID = player.getClientID();
 
 		// Add to voted clients
-		Map<String, PlayerInfo> clients = voted.get(playerID);
+		Map<String, PlayerState> clients = voted.get(playerID);
 		if (clients == null) {
-			clients = new HashMap<String, PlayerInfo>();
+			clients = new HashMap<String, PlayerState>();
 			voted.put(playerID, clients);
 		}
 		clients.put(clientID, player);
@@ -83,7 +83,7 @@ public class PlayerRegister {
 		}
 
 		// Remove voted client
-		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		Map<String, PlayerState> votedClients = voted.get(playerID);
 		if (votedClients != null) {
 			// Remove from client map
 			votedClients.remove(clientID);
@@ -120,14 +120,14 @@ public class PlayerRegister {
 	 * @param playerID
 	 *            The player identifier.
 	 */
-	public PlayerInfo getConfirmed(String playerID) {
+	public PlayerState getConfirmed(String playerID) {
 		return confirmed.get(playerID);
 	}
 
 	/**
 	 * Get all currently confirmed players.
 	 */
-	public Collection<PlayerInfo> getConfirmed() {
+	public Collection<PlayerState> getConfirmed() {
 		return Collections.unmodifiableCollection(confirmed.values());
 	}
 
@@ -157,12 +157,37 @@ public class PlayerRegister {
 	 *            The player identifier.
 	 */
 	public boolean hasVoted(String playerID) {
-		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+		Map<String, PlayerState> votedClients = voted.get(playerID);
 		return votedClients != null && !votedClients.isEmpty();
 	}
 
-	public PlayerInfo getVoted(String clientID, String playerID) {
-		Map<String, PlayerInfo> votedClients = voted.get(playerID);
+	/**
+	 * Check whether the given player has been voted for.
+	 * 
+	 * @param clientID
+	 *            The client identifier.
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public boolean isVoted(String clientID, String playerID) {
+		Map<String, PlayerState> votedClients = voted.get(playerID);
+		if (votedClients != null) {
+			return votedClients.containsKey(clientID);
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Get the player that has been voted for with the given identifiers.
+	 * 
+	 * @param clientID
+	 *            The client identifier.
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public PlayerState getVoted(String clientID, String playerID) {
+		Map<String, PlayerState> votedClients = voted.get(playerID);
 		if (votedClients != null) {
 			return votedClients.get(clientID);
 		} else {
