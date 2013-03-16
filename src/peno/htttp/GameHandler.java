@@ -3,7 +3,7 @@ package peno.htttp;
 /**
  * A handler for game events.
  */
-public interface Handler {
+public interface GameHandler {
 
 	/**
 	 * Invoked when the game has started.
@@ -29,12 +29,12 @@ public interface Handler {
 	public void gamePaused();
 
 	/**
-	 * Invoked when the player numbers have been rolled.
+	 * Invoked when a player attempts to join the game.
 	 * 
-	 * @param playerNumber
-	 *            The local player's player number.
+	 * @param playerID
+	 *            The player identifier.
 	 */
-	public void gameRolled(int playerNumber);
+	public void playerJoining(String playerID);
 
 	/**
 	 * Invoked when a player has joined the game.
@@ -45,12 +45,14 @@ public interface Handler {
 	public void playerJoined(String playerID);
 
 	/**
-	 * Invoked when a player has left the game.
+	 * Invoked when a player has disconnected from the game.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
+	 * @param reason
+	 *            The reason for the disconnect.
 	 */
-	public void playerLeft(String playerID);
+	public void playerDisconnected(String playerID, DisconnectReason reason);
 
 	/**
 	 * Invoked when a player changes his ready state.
@@ -63,25 +65,13 @@ public interface Handler {
 	public void playerReady(String playerID, boolean isReady);
 
 	/**
-	 * Invoked when a player updates its position.
-	 * 
-	 * @param playerID
-	 *            The player identifier.
-	 * @param x
-	 *            The X-coordinate of the player's position.
-	 * @param y
-	 *            The Y-coordinate of the player's position.
-	 * @param angle
-	 *            The angle of the player's orientation.
-	 */
-	public void playerPosition(String playerID, double x, double y, double angle);
-
-	/**
 	 * Invoked when a player has found their object.
 	 * 
 	 * @param playerID
 	 *            The player identifier.
+	 * @param playerNumber
+	 *            The player number.
 	 */
-	public void playerFoundObject(String playerID);
+	public void playerFoundObject(String playerID, int playerNumber);
 
 }

@@ -1,13 +1,13 @@
 package peno.htttp.impl;
 
-public class PlayerInfo {
+public class PlayerState {
 
 	private final String clientID;
 	private final String playerID;
 	private boolean isReady;
 	private long lastHeartbeat;
 
-	public PlayerInfo(String clientID, String playerID) {
+	public PlayerState(String clientID, String playerID) {
 		this.clientID = clientID;
 		this.playerID = playerID;
 	}
