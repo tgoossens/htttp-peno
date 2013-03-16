@@ -161,6 +161,31 @@ public class PlayerRegister {
 		return votedClients != null && !votedClients.isEmpty();
 	}
 
+	/**
+	 * Check whether the given player has been voted for.
+	 * 
+	 * @param clientID
+	 *            The client identifier.
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public boolean isVoted(String clientID, String playerID) {
+		Map<String, PlayerState> votedClients = voted.get(playerID);
+		if (votedClients != null) {
+			return votedClients.containsKey(clientID);
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Get the player that has been voted for with the given identifiers.
+	 * 
+	 * @param clientID
+	 *            The client identifier.
+	 * @param playerID
+	 *            The player identifier.
+	 */
 	public PlayerState getVoted(String clientID, String playerID) {
 		Map<String, PlayerState> votedClients = voted.get(playerID);
 		if (votedClients != null) {

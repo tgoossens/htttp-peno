@@ -250,6 +250,19 @@ public class PlayerClient {
 		}
 	}
 
+	private boolean isPlayerConnected(String clientID, String playerID) {
+		synchronized (players) {
+			// Missing players are disconnected
+			if (players.isMissing(playerID))
+				return false;
+			// Confirmed players are connected
+			if (players.isConfirmed(clientID, playerID))
+				return true;
+			// Voted players are connected
+			return players.isVoted(clientID, playerID);
+		}
+	}
+
 	/*
 	 * Joining/leaving
 	 */
@@ -343,7 +356,7 @@ public class PlayerClient {
 		handler.playerJoining(playerID);
 	}
 
-	private void playerJoined(String clientID, String playerID, boolean isReady) throws IOException {
+	private synchronized void playerJoined(String clientID, String playerID, boolean isReady) throws IOException {
 		// Confirm player
 		confirmPlayer(clientID, playerID, isReady);
 		// Call handler
@@ -401,7 +414,12 @@ public class PlayerClient {
 		}
 	}
 
-	private void playerDisconnected(String clientID, String playerID, DisconnectReason reason) {
+	private synchronized void playerDisconnected(String clientID, String playerID, DisconnectReason reason) {
+		// Ignore if player has already disconnected
+		// Can occur when receiving multiple heart beat timeout disconnects
+		if (!isPlayerConnected(clientID, playerID))
+			return;
+
 		// Call handler
 		handler.playerDisconnected(playerID, reason);
 
@@ -887,6 +905,9 @@ public class PlayerClient {
 	}
 
 	private void heartbeatMissing(PlayerState player) throws IOException {
+		// Handle locally
+		playerDisconnected(player.getClientID(), player.getPlayerID(), DisconnectReason.TIMEOUT);
+
 		// Publish leave for player
 		Map<String, Object> message = newMessage();
 		message.put("playerID", player.getPlayerID());
