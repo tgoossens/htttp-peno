@@ -6,6 +6,24 @@ package peno.htttp;
 public interface SpectatorHandler extends GameHandler {
 
 	/**
+	 * Invoked when a player attempts to join the game.
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 */
+	public void playerJoining(String playerID);
+
+	/**
+	 * {@inheritDoc}
+	 * 
+	 * <p>
+	 * Note: this is also called when a player is rejected from the game.
+	 * </p>
+	 */
+	@Override
+	public void playerLeft(String playerID);
+
+	/**
 	 * Invoked when a player updates its position.
 	 * 
 	 * <p>
@@ -33,15 +51,5 @@ public interface SpectatorHandler extends GameHandler {
 	 *            The angle of the player's orientation.
 	 */
 	public void playerPosition(String playerID, int playerNumber, double x, double y, double angle);
-
-	/**
-	 * Invoked when a player has found their object.
-	 * 
-	 * @param playerID
-	 *            The player identifier.
-	 * @param playerNumber
-	 *            The player number.
-	 */
-	public void playerFoundObject(String playerID, int playerNumber);
 
 }

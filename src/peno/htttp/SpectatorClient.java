@@ -101,6 +101,7 @@ public class SpectatorClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
+			String playerID = (String) message.get("playerID");
 			if (topic.equals("start")) {
 				// Game started
 				handler.gameStarted();
@@ -110,9 +111,21 @@ public class SpectatorClient {
 			} else if (topic.equals("pause")) {
 				// Game paused
 				handler.gamePaused();
+			} else if (topic.equals("join")) {
+				// Player joining
+				handler.playerJoining(playerID);
+			} else if (topic.equals("joined")) {
+				// Player joined
+				handler.playerJoined(playerID);
+			} else if (topic.equals("leave")) {
+				// Player left
+				handler.playerLeft(playerID);
+			} else if (topic.equals("ready")) {
+				// Player ready
+				boolean isReady = (Boolean) message.get("isReady");
+				handler.playerReady(playerID, isReady);
 			} else if (topic.equals("position")) {
 				// Player updated their position
-				String playerID = (String) message.get("playerID");
 				int playerNumber = ((Number) message.get("playerNumber")).intValue();
 				double x = ((Number) message.get("x")).doubleValue();
 				double y = ((Number) message.get("y")).doubleValue();
@@ -120,7 +133,6 @@ public class SpectatorClient {
 				handler.playerPosition(playerID, playerNumber, x, y, angle);
 			} else if (topic.equals("found")) {
 				// Player found their object
-				String playerID = (String) message.get("playerID");
 				int playerNumber = ((Number) message.get("playerNumber")).intValue();
 				handler.playerFoundObject(playerID, playerNumber);
 			}

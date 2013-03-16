@@ -1250,7 +1250,8 @@ public class PlayerClient {
 				paused();
 			} else if (topic.equals("found")) {
 				// Player found their object
-				handler.playerFoundObject(playerID);
+				int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				handler.playerFoundObject(playerID, playerNumber);
 			} else if (topic.equals("heartbeat")) {
 				// Heartbeat
 				heartbeatReceived(playerID);
