@@ -318,6 +318,31 @@ public class PlayerClient {
 		tryRoll();
 	}
 
+	private void playerJoining(String clientID, String playerID, BasicProperties props) throws IOException {
+		// Check if accepted
+		boolean isAccepted = canJoin(clientID, playerID);
+		// Store player
+		votePlayer(clientID, playerID);
+
+		// Create and send reply
+		Map<String, Object> reply = newMessage();
+		reply.put("result", isAccepted);
+		// Add data if accepted
+		if (isAccepted) {
+			// Report own player state
+			PlayerState player = getLocalPlayer();
+			reply.put("clientID", player.getClientID());
+			reply.put("isReady", player.isReady());
+			reply.put("isJoined", isJoined());
+			// Report game state
+			writeGameState(reply);
+		}
+		reply(props, reply);
+
+		// Call handler
+		handler.playerJoining(playerID);
+	}
+
 	private void playerJoined(String clientID, String playerID, boolean isReady) throws IOException {
 		// Confirm player
 		confirmPlayer(clientID, playerID, isReady);
@@ -1195,27 +1220,8 @@ public class PlayerClient {
 				return;
 
 			if (topic.equals("join")) {
-				// Prepare reply
-				PlayerState player = getLocalPlayer();
-				Map<String, Object> reply = newMessage();
-				// Check if accepted
-				boolean isAccepted = canJoin(clientID, playerID);
-				reply.put("result", isAccepted);
-				// Store player
-				votePlayer(clientID, playerID);
-				// Add data if accepted
-				if (isAccepted) {
-					// Report own player state
-					reply.put("clientID", player.getClientID());
-					reply.put("isReady", player.isReady());
-					reply.put("isJoined", isJoined());
-					// Report game state
-					writeGameState(reply);
-				}
-				// Send reply
-				reply(props, reply);
-				// Call handler
-				handler.playerJoining(playerID);
+				// Player joining
+				playerJoining(clientID, playerID, props);
 			} else if (topic.equals("joined")) {
 				// Player joined
 				boolean isReady = (Boolean) message.get("isReady");
