@@ -73,6 +73,11 @@ public class PlayerClient {
 	private final Map<String, PlayerRoll> playerRolls = new HashMap<String, PlayerRoll>();
 
 	/*
+	 * Found objects
+	 */
+	private final Set<String> foundObjects = new HashSet<String>();
+
+	/*
 	 * Heart beat
 	 */
 	private ScheduledExecutorService heartbeatExecutor;
@@ -327,6 +332,8 @@ public class PlayerClient {
 	private void joined() throws IOException {
 		// Setup public queue
 		setupPublic();
+		// Trigger handlers for previously found objects
+		triggerFoundObjects();
 		// Try to roll
 		tryRoll();
 	}
@@ -796,7 +803,7 @@ public class PlayerClient {
 	}
 
 	/*
-	 * Notifications
+	 * Position
 	 */
 
 	/**
@@ -824,11 +831,46 @@ public class PlayerClient {
 		}
 
 		Map<String, Object> message = newMessage();
-		message.put("playerNumber", getPlayerNumber());
 		message.put("x", x);
 		message.put("y", y);
 		message.put("angle", angle);
-		publish("position", message);
+		message.put("playerNumber", getPlayerNumber());
+		message.put("foundObject", hasFoundObject());
+		publish("update", message);
+	}
+
+	/*
+	 * Object finding
+	 */
+
+	/**
+	 * Check whether the local player has found their object.
+	 */
+	public boolean hasFoundObject() {
+		return foundObjects.contains(getPlayerID());
+	}
+
+	private void setFoundObjects(Iterable<String> players) {
+		for (String playerID : players) {
+			foundObjects.add(playerID);
+		}
+	}
+
+	private void clearFoundObjects() {
+		foundObjects.clear();
+	}
+
+	private void triggerFoundObjects() throws IOException {
+		if (!hasPlayerNumber())
+			return;
+
+		// Trigger handlers for currently connected players
+		// This includes the local player
+		for (String playerID : foundObjects) {
+			if (players.hasConfirmed(playerID)) {
+				handler.playerFoundObject(playerID, playerNumbers.get(playerID));
+			}
+		}
 	}
 
 	/**
@@ -836,18 +878,33 @@ public class PlayerClient {
 	 * object.
 	 * 
 	 * @throws IllegalStateException
-	 *             If not playing.
+	 *             If not playing or if already found.
 	 * @throws IOException
 	 */
 	public void foundObject() throws IllegalStateException, IOException {
 		if (!isPlaying()) {
 			throw new IllegalStateException("Cannot find object when not playing.");
 		}
+		if (hasFoundObject()) {
+			throw new IllegalStateException("Object already found.");
+		}
+
+		// Mark own object as found
+		foundObjects.add(getPlayerID());
 
 		// Publish
 		Map<String, Object> message = newMessage();
 		message.put("playerNumber", getPlayerNumber());
 		publish("found", message);
+	}
+
+	private void playerFoundObject(String playerID) {
+		// Mark object as found
+		foundObjects.add(playerID);
+
+		// Call handler
+		int playerNumber = playerNumbers.get(playerID);
+		handler.playerFoundObject(playerID, playerNumber);
 	}
 
 	/*
@@ -1018,6 +1075,8 @@ public class PlayerClient {
 		setGameState(GameState.DISCONNECTED);
 		// Clear player rolls and numbers
 		clearPlayerNumbers();
+		// Clear found objects
+		clearFoundObjects();
 		// Set as not ready
 		getLocalPlayer().setReady(false);
 		// Only retain local player
@@ -1032,6 +1091,13 @@ public class PlayerClient {
 		String gameState = (String) message.get("gameState");
 		if (gameState != null) {
 			setGameState(GameState.valueOf(gameState));
+		}
+
+		// Found objects (if valid)
+		@SuppressWarnings("unchecked")
+		Iterable<String> foundObjects = (Iterable<String>) message.get("foundObjects");
+		if (foundObjects != null) {
+			setFoundObjects(foundObjects);
 		}
 
 		// Player numbers (if valid)
@@ -1053,6 +1119,10 @@ public class PlayerClient {
 		// Game state
 		if (isJoined()) {
 			message.put("gameState", getGameState().name());
+		}
+		// Found objects
+		if (isJoined()) {
+			message.put("foundObjects", foundObjects);
 		}
 		// Player numbers
 		if (hasPlayerNumber()) {
@@ -1287,8 +1357,7 @@ public class PlayerClient {
 				paused();
 			} else if (topic.equals("found")) {
 				// Player found their object
-				int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				handler.playerFoundObject(playerID, playerNumber);
+				playerFoundObject(playerID);
 			} else if (topic.equals("heartbeat")) {
 				// Heartbeat
 				heartbeatReceived(playerID);

@@ -125,13 +125,14 @@ public class SpectatorClient {
 				// Player ready
 				boolean isReady = (Boolean) message.get("isReady");
 				handler.playerReady(playerID, isReady);
-			} else if (topic.equals("position")) {
-				// Player updated their position
+			} else if (topic.equals("update")) {
+				// Player updated their state
 				int playerNumber = ((Number) message.get("playerNumber")).intValue();
 				double x = ((Number) message.get("x")).doubleValue();
 				double y = ((Number) message.get("y")).doubleValue();
 				double angle = ((Number) message.get("angle")).doubleValue();
-				handler.playerPosition(playerID, playerNumber, x, y, angle);
+				boolean foundObject = (Boolean) message.get("foundObject");
+				handler.playerUpdate(playerID, playerNumber, x, y, angle, foundObject);
 			} else if (topic.equals("found")) {
 				// Player found their object
 				int playerNumber = ((Number) message.get("playerNumber")).intValue();
