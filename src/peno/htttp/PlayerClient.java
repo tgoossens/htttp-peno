@@ -1047,6 +1047,10 @@ public class PlayerClient {
 
 		// Set team number
 		getLocalPlayer().setTeamNumber(teamNumber);
+		/*
+		 * TODO Publish team number for others to store it in case this player
+		 * loses their connection and rejoins.
+		 */
 
 		// Setup team
 		setupTeam(teamNumber);
