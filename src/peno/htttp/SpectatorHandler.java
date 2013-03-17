@@ -6,7 +6,7 @@ package peno.htttp;
 public interface SpectatorHandler extends GameHandler {
 
 	/**
-	 * Invoked when a player updates its position.
+	 * Invoked when a player updates its state.
 	 * 
 	 * <p>
 	 * The standard coordinate system has the X-axis running from left to right
@@ -31,7 +31,9 @@ public interface SpectatorHandler extends GameHandler {
 	 *            The Y-coordinate of the player's position.
 	 * @param angle
 	 *            The angle of the player's orientation.
+	 * @param foundObject
+	 *            True if the player has found their object.
 	 */
-	public void playerPosition(String playerID, int playerNumber, double x, double y, double angle);
+	public void playerUpdate(String playerID, int playerNumber, double x, double y, double angle, boolean foundObject);
 
 }
