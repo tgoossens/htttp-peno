@@ -13,4 +13,12 @@ public interface PlayerHandler extends GameHandler {
 	 */
 	public void gameRolled(int playerNumber);
 
+	/**
+	 * Invoked when the team partner has connected.
+	 * 
+	 * @param partnerID
+	 *            The partner's player identifier.
+	 */
+	public void teamConnected(String partnerID);
+
 }

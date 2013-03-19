@@ -42,9 +42,9 @@ public class PlayerClient {
 	 * Constants
 	 */
 	public static final int nbPlayers = 4;
-	public static final int joinExpiration = 2000;
+	public static final int requestLifetime = 2000;
 	public static final int heartbeatFrequency = 2000;
-	public static final int heartbeatExpiration = 5000;
+	public static final int heartbeatLifetime = 5000;
 
 	/*
 	 * Communication
@@ -56,6 +56,11 @@ public class PlayerClient {
 	private Consumer joinConsumer;
 	private Consumer publicConsumer;
 	private Consumer teamConsumer;
+
+	/*
+	 * Team communication
+	 */
+	private String teamPartner = null;
 
 	/*
 	 * Identifiers
@@ -80,6 +85,7 @@ public class PlayerClient {
 	 */
 	private ScheduledExecutorService heartbeatExecutor;
 	private ScheduledFuture<?> heartbeatTask;
+
 	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
 
 	/**
@@ -311,7 +317,7 @@ public class PlayerClient {
 		heartbeatStart();
 
 		// Request to join
-		new JoinRequester(callback).request(joinExpiration);
+		new JoinRequester(callback).request(requestLifetime);
 	}
 
 	/**
@@ -958,7 +964,7 @@ public class PlayerClient {
 	}
 
 	private void heartbeatCheck() throws IOException {
-		final long limit = System.currentTimeMillis() - heartbeatExpiration;
+		final long limit = System.currentTimeMillis() - heartbeatLifetime;
 		// Clone for safe iteration
 		final PlayerState[] confirmed = players.getConfirmed().toArray(new PlayerState[0]);
 		// Check all confirmed players
@@ -1014,6 +1020,9 @@ public class PlayerClient {
 
 	/**
 	 * Get the local player's team number.
+	 * 
+	 * @throws IllegalStateException
+	 *             If not in any team yet.
 	 */
 	public int getTeamNumber() {
 		if (!hasTeamNumber()) {
@@ -1031,6 +1040,29 @@ public class PlayerClient {
 	}
 
 	/**
+	 * Get the player identifier of the team partner.
+	 * 
+	 * @throws IllegalStateException
+	 *             If not in any team yet, or if partner still unknown.
+	 */
+	public String getTeamPartner() {
+		if (!hasTeamNumber()) {
+			throw new IllegalStateException("Not in any team yet.");
+		}
+		if (!hasTeamPartner()) {
+			throw new IllegalStateException("Partner still unknown.");
+		}
+		return teamPartner;
+	}
+
+	/**
+	 * Check if the team partner is known yet.
+	 */
+	public boolean hasTeamPartner() {
+		return teamPartner != null;
+	}
+
+	/**
 	 * Join the given team.
 	 * 
 	 * @param teamNumber
@@ -1043,17 +1075,74 @@ public class PlayerClient {
 		if (!isPlaying()) {
 			throw new IllegalStateException("Cannot join team when not playing.");
 		}
-		// TODO Check whether already in the team channel.
+		if (hasTeamNumber()) {
+			throw new IllegalStateException("Already joined a team.");
+		}
 
 		// Set team number
 		getLocalPlayer().setTeamNumber(teamNumber);
+
+		// Start listening
+		setupTeam(getTeamNumber());
+
 		/*
 		 * TODO Publish team number for others to store it in case this player
 		 * loses their connection and rejoins.
 		 */
 
-		// Setup team
-		setupTeam(teamNumber);
+		// Ping for partner
+		new TeamPingRequester(channel, requestProvider).request(requestLifetime);
+	}
+
+	/**
+	 * Called when a ping was received.
+	 * 
+	 * @param playerID
+	 * @throws IOException
+	 */
+	private void teamPingReceived(String playerID, BasicProperties props) throws IOException {
+		// Store team partner
+		this.teamPartner = playerID;
+
+		// Reply with a pong
+		reply(props, newMessage());
+
+		// Start communicating
+		handler.teamConnected(playerID);
+	}
+
+	/**
+	 * Called when a pong was received.
+	 * 
+	 * @param playerID
+	 */
+	private void teamPongReceived(String playerID) {
+		// Store team partner
+		this.teamPartner = playerID;
+
+		// Start communicating
+		handler.teamConnected(playerID);
+	}
+
+	/**
+	 * Called when the ping expired.
+	 */
+	private void teamPingNoResponse() {
+		// Already listening
+	}
+
+	protected String toTeamTopic(String topic) {
+		if (!hasTeamNumber()) {
+			throw new IllegalStateException("Not in any team yet.");
+		}
+		return "team." + getTeamNumber() + "." + topic;
+	}
+
+	protected String fromTeamTopic(String teamTopic) {
+		if (!hasTeamNumber()) {
+			throw new IllegalStateException("Not in any team yet.");
+		}
+		return teamTopic.substring(toTeamTopic("").length());
 	}
 
 	/*
@@ -1097,7 +1186,7 @@ public class PlayerClient {
 
 	private void setupTeam(int teamNumber) throws IOException {
 		teamConsumer = new TeamConsumer(channel);
-		teamConsumer.bind(getGameID(), "team." + teamNumber + ".*");
+		teamConsumer.bind(getGameID(), toTeamTopic("*"));
 	}
 
 	private void shutdownTeam() throws IOException {
@@ -1415,8 +1504,50 @@ public class PlayerClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
-			// TODO Auto-generated method stub
+			String playerID = (String) message.get("playerID");
+			topic = fromTeamTopic(topic);
 
+			// Ignore local messages
+			if (getPlayerID().equals(playerID))
+				return;
+
+			if (topic.equals("ping")) {
+				// Partner connected
+				PlayerClient.this.teamPingReceived(playerID, props);
+			} else if (topic.equals("match")) {
+				// TODO Match
+			} else if (topic.equals("meet")) {
+				// TODO Meet
+			}
+
+		}
+
+	}
+
+	private class TeamPingRequester extends Requester {
+
+		public TeamPingRequester(Channel channel, RequestProvider provider) throws IOException {
+			super(channel, provider);
+			// TODO Auto-generated constructor stub
+		}
+
+		public void request(int timeout) throws IOException {
+			// Publish ping
+			Map<String, Object> message = newMessage();
+			request(getGameID(), toTeamTopic("ping"), prepareMessage(message), timeout);
+		}
+
+		@Override
+		public void handleResponse(Map<String, Object> message, BasicProperties props) {
+			// Partner responded
+			String playerID = (String) message.get("playerID");
+			PlayerClient.this.teamPongReceived(playerID);
+		}
+
+		@Override
+		public void handleTimeout() {
+			// Partner did not respond
+			PlayerClient.this.teamPingNoResponse();
 		}
 
 	}
