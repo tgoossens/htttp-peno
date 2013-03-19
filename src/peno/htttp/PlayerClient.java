@@ -1131,11 +1131,18 @@ public class PlayerClient {
 		// Already listening
 	}
 
-	protected String getTeamTopic(String topic) {
+	protected String toTeamTopic(String topic) {
 		if (!hasTeamNumber()) {
 			throw new IllegalStateException("Not in any team yet.");
 		}
 		return "team." + getTeamNumber() + "." + topic;
+	}
+
+	protected String fromTeamTopic(String teamTopic) {
+		if (!hasTeamNumber()) {
+			throw new IllegalStateException("Not in any team yet.");
+		}
+		return teamTopic.substring(toTeamTopic("").length());
 	}
 
 	/*
@@ -1179,7 +1186,7 @@ public class PlayerClient {
 
 	private void setupTeam(int teamNumber) throws IOException {
 		teamConsumer = new TeamConsumer(channel);
-		teamConsumer.bind(getGameID(), getTeamTopic("*"));
+		teamConsumer.bind(getGameID(), toTeamTopic("*"));
 	}
 
 	private void shutdownTeam() throws IOException {
@@ -1498,6 +1505,7 @@ public class PlayerClient {
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
 			String playerID = (String) message.get("playerID");
+			topic = fromTeamTopic(topic);
 
 			// Ignore local messages
 			if (getPlayerID().equals(playerID))
@@ -1526,7 +1534,7 @@ public class PlayerClient {
 		public void request(int timeout) throws IOException {
 			// Publish ping
 			Map<String, Object> message = newMessage();
-			request(getGameID(), getTeamTopic("ping"), prepareMessage(message), timeout);
+			request(getGameID(), toTeamTopic("ping"), prepareMessage(message), timeout);
 		}
 
 		@Override
