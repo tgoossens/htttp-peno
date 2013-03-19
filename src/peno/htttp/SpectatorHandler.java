@@ -11,7 +11,7 @@ public interface SpectatorHandler extends GameHandler {
 	 * <p>
 	 * The standard coordinate system has the X-axis running from left to right
 	 * and the Y-axis from bottom to top. The angle of orientation is measured
-	 * clockwise from the positive X-axis to the positive Y-axis.
+	 * counterclockwise from the positive X-axis to the positive Y-axis.
 	 * </p>
 	 * 
 	 * <p>
