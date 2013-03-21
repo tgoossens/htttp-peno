@@ -241,8 +241,19 @@ public class PlayerRegister {
 	/**
 	 * Get the amount of confirmed players.
 	 */
-	public int getNbPlayers() {
+	public int getNbConfirmedPlayers() {
 		return confirmed.size();
+	}
+
+	/**
+	 * Get the total amount of confirmed and voted players.
+	 */
+	public int getNbVotedPlayers() {
+		int count = getNbConfirmedPlayers();
+		for (Map<String, PlayerState> votedClients : voted.values()) {
+			count += votedClients.size();
+		}
+		return count;
 	}
 
 	/**

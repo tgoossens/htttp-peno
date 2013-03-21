@@ -166,7 +166,22 @@ public class PlayerClient {
 	 */
 	public int getNbPlayers() {
 		synchronized (players) {
-			return players.getNbPlayers();
+			return players.getNbConfirmedPlayers();
+		}
+	}
+
+	/**
+	 * Get the number of players which may end up joining the game.
+	 * 
+	 * This consists of the number of confirmed players (as they are already in
+	 * the game) as well as the number of voted players (as they might succeed
+	 * in joining).
+	 * 
+	 * @return
+	 */
+	private int getNbVotedPlayers() {
+		synchronized (players) {
+			return players.getNbVotedPlayers();
 		}
 	}
 
@@ -328,22 +343,22 @@ public class PlayerClient {
 	 */
 	protected boolean canJoin(String clientID, String playerID) {
 		switch (getGameState()) {
-		case PLAYING:
-			// Nobody can join while playing
-			return false;
-		case PAUSED:
-			// Only missing players can join
-			return isMissingPlayer(playerID);
 		case JOINING:
 		case STARTING:
 		case WAITING:
 			// Reject duplicate players
 			if (!players.canJoin(clientID, playerID))
 				return false;
-			// Reject when full
-			if (isFull())
+			// Reject when might become full
+			if (getNbVotedPlayers() >= nbPlayers)
 				return false;
 			return true;
+		case PLAYING:
+			// Nobody can join while playing
+			return false;
+		case PAUSED:
+			// Only missing players can join
+			return isMissingPlayer(playerID);
 		default:
 		}
 		return false;
@@ -459,6 +474,10 @@ public class PlayerClient {
 		handler.playerDisconnected(playerID, reason);
 
 		switch (getGameState()) {
+		case JOINING:
+			// Remove player
+			removePlayer(clientID, playerID);
+			break;
 		case WAITING:
 		case STARTING:
 			// Revert to waiting
@@ -1325,7 +1344,7 @@ public class PlayerClient {
 		}
 
 		@Override
-		public void handleResponse(Map<String, Object> message, BasicProperties props) {
+		protected void handleResponse(Map<String, Object> message, BasicProperties props) {
 			// Ignore when done
 			if (isDone)
 				return;
@@ -1362,7 +1381,7 @@ public class PlayerClient {
 		}
 
 		@Override
-		public void handleTimeout() {
+		protected void handleTimeout() {
 			if (!isDone) {
 				// No response, first player in game
 				// Set game state if not set yet
@@ -1538,14 +1557,14 @@ public class PlayerClient {
 		}
 
 		@Override
-		public void handleResponse(Map<String, Object> message, BasicProperties props) {
+		protected void handleResponse(Map<String, Object> message, BasicProperties props) {
 			// Partner responded
 			String playerID = (String) message.get("playerID");
 			PlayerClient.this.teamPongReceived(playerID);
 		}
 
 		@Override
-		public void handleTimeout() {
+		protected void handleTimeout() {
 			// Partner did not respond
 			PlayerClient.this.teamPingNoResponse();
 		}

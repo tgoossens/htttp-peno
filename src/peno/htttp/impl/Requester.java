@@ -49,7 +49,7 @@ public abstract class Requester extends Consumer {
 		}
 	}
 
-	protected void cancelRequest() throws IOException {
+	protected void cancelRequest() {
 		// Cancel timeout
 		if (timeoutFuture != null) {
 			timeoutFuture.cancel(false);
@@ -64,8 +64,8 @@ public abstract class Requester extends Consumer {
 		}
 	}
 
-	public abstract void handleResponse(Map<String, Object> message, BasicProperties props);
+	protected abstract void handleResponse(Map<String, Object> message, BasicProperties props);
 
-	public abstract void handleTimeout();
+	protected abstract void handleTimeout();
 
 }
