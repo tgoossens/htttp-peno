@@ -1181,6 +1181,20 @@ public class PlayerClient {
 	}
 
 	/**
+	 * Send maze tiles to the team partner.
+	 * 
+	 * @param tiles
+	 *            The tiles to send.
+	 * @throws IllegalStateException
+	 *             If not in any team yet, or if partner still unknown.
+	 * @throws IOException
+	 * @see {@link #sendTiles(Collection)}
+	 */
+	public void sendTiles(Tile... tiles) throws IOException {
+		sendTiles(Arrays.asList(tiles));
+	}
+
+	/**
 	 * Called when tiles have been received.
 	 * 
 	 * @param message
