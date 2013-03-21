@@ -101,41 +101,41 @@ public class SpectatorClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
-			String playerID = (String) message.get("playerID");
-			if (topic.equals("start")) {
+			String playerID = (String) message.get(Constants.PLAYER_ID);
+			if (topic.equals(Constants.START)) {
 				// Game started
 				handler.gameStarted();
-			} else if (topic.equals("stop")) {
+			} else if (topic.equals(Constants.STOP)) {
 				// Game stopped
 				handler.gameStopped();
-			} else if (topic.equals("pause")) {
+			} else if (topic.equals(Constants.PAUSE)) {
 				// Game paused
 				handler.gamePaused();
-			} else if (topic.equals("join")) {
+			} else if (topic.equals(Constants.JOIN)) {
 				// Player joining
 				handler.playerJoining(playerID);
-			} else if (topic.equals("joined")) {
+			} else if (topic.equals(Constants.JOINED)) {
 				// Player joined
 				handler.playerJoined(playerID);
-			} else if (topic.equals("disconnect")) {
+			} else if (topic.equals(Constants.DISCONNECT)) {
 				// Player disconnected
-				DisconnectReason reason = DisconnectReason.valueOf((String) message.get("reason"));
+				DisconnectReason reason = DisconnectReason.valueOf((String) message.get(Constants.DISCONNECT_REASON));
 				handler.playerDisconnected(playerID, reason);
-			} else if (topic.equals("ready")) {
+			} else if (topic.equals(Constants.READY)) {
 				// Player ready
-				boolean isReady = (Boolean) message.get("isReady");
+				boolean isReady = (Boolean) message.get(Constants.IS_READY);
 				handler.playerReady(playerID, isReady);
-			} else if (topic.equals("update")) {
+			} else if (topic.equals(Constants.UPDATE)) {
 				// Player updated their state
-				int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				double x = ((Number) message.get("x")).doubleValue();
-				double y = ((Number) message.get("y")).doubleValue();
-				double angle = ((Number) message.get("angle")).doubleValue();
-				boolean foundObject = (Boolean) message.get("foundObject");
+				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
+				double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
+				boolean foundObject = (Boolean) message.get(Constants.UPDATE_FOUND_OBJECT);
 				handler.playerUpdate(playerID, playerNumber, x, y, angle, foundObject);
-			} else if (topic.equals("found")) {
+			} else if (topic.equals(Constants.FOUND_OBJECT)) {
 				// Player found their object
-				int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
 				handler.playerFoundObject(playerID, playerNumber);
 			}
 		}
