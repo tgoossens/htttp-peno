@@ -11,7 +11,15 @@ public interface Constants {
 	public static final String PLAYER_ID = "playerID";
 	public static final String CLIENT_ID = "clientID";
 	public static final String PLAYER_NUMBER = "playerNumber";
-
+	
+	
+	/*
+	 *  Seesaw lock
+	 */
+	public static final String SEESAW_REQUEST_LOCK = "seesawrequest";
+	public static final String SEESAW_LOCK = "seesawlock";
+	public static final String SEESAW_UNLOCK = "seesawunlock";
+	
 	/*
 	 * Join
 	 */

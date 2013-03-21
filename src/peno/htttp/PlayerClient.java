@@ -87,6 +87,11 @@ public class PlayerClient {
 	private ScheduledExecutorService heartbeatExecutor;
 	private ScheduledFuture<?> heartbeatTask;
 
+	/*
+	 * Seesaw
+	 */
+	private int seesawlock = 0;
+
 	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
 
 	/**
@@ -338,7 +343,7 @@ public class PlayerClient {
 
 	/**
 	 * Check if the given player can join.
-	 * 	
+	 * 
 	 * @param playerID
 	 *            The player identifier.
 	 */
@@ -883,38 +888,101 @@ public class PlayerClient {
 		message.put(Constants.UPDATE_FOUND_OBJECT, hasFoundObject());
 		publish(Constants.UPDATE, message);
 	}
-	
-	
-	/** 
+
+	/**
 	 * Seesaw
 	 */
 
+	public boolean hasLockOnSeesaw(int barcode) {
+		return (this.seesawlock == barcode);
+	}
+
 	/**
-	 * Publish notification that the player is about to traverse a seesaw.
+	 * Unlock a seesaw
 	 * 
-	 * This should be done after the barcode had been read and just before the player starts traversing the seesaw.
+	 * @param barcode
+	 * @throws IOException
+	 *             If the unlock message could not be sent.
+	 * @throws Exception
+	 *             If the player has no lock
+	 */
+	public void unlockSeesaw(int barcode) throws Exception {
+		if (!hasLockOnSeesaw(barcode))
+			throw new Exception("You cannot unlock what's not locked");
+
+		this.seesawlock = 0;
+		
+		Map<String, Object> message = newMessage();
+		message.put("barcode", barcode);
+		message.put("playerNumber", getPlayerNumber());
+		publish(Constants.SEESAW_UNLOCK, message);
+		
+	}
+
+	/**
+	 * Request a lock on a seesaw. When the lock is granted onSuccess will be
+	 * called on the given callback.
+	 * 
+	 * This should be done after the barcode in front of the seesaw has been
+	 * read and just before the player starts traversing the seesaw.
+	 * 
+	 * On no account should a player be allowed to traverse a seesaw if no lock
+	 * is granted.
 	 * 
 	 * <p>
-	 * The player must provide the barcode that has been read in front of the seesaw. 
+	 * The player must provide the barcode that has been read in front of the
+	 * seesaw. This to identify the seesaw and the direction in which the seesaw
+	 * will flip.
 	 * </p>
 	 * 
 	 * @param barcode
-	 * 	The barcode that has been read in front of the seesaw.
-	 * 
-	 * @throws IllegalStateException
-	 * @throws IOException
+	 * @param callback
 	 */
-	public void traverseSeesaw(int barcode) throws IllegalStateException,IOException{
-		if (!isPlaying()) {
-			throw new IllegalStateException("Cannot traverse seesaw when not playing.");
+	public void requestSeesawLock(final int barcode, final Callback<Void> callback) {
+
+		// if a lock was already granted return with success.
+		if (hasLockOnSeesaw(barcode)) {
+			System.err.println("has already lock");
+			callback.onSuccess(null);
+			return;
 		}
 
-		Map<String, Object> message = newMessage();
-		message.put("barcode", barcode);
-		publish("seesaw", message);
+		/*
+		 * Wrap the given callback to add extra side effects.
+		 */
+		final Callback<Void> requestCallback = new Callback<Void>() {
 
+			@Override
+			public void onSuccess(Void result) {
+				// grant the lock
+				PlayerClient.this.seesawlock = barcode;
+				final Map<String,Object> message = newMessage();
+				message.put("barcode", barcode);
+				message.put("playerNumber", getPlayerNumber());
+				try {
+					publish(Constants.SEESAW_LOCK,message);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				System.err.println("onsuccess lock");
+				callback.onSuccess(result);
+
+			}
+
+			@Override
+			public void onFailure(Throwable t) {
+
+				callback.onFailure(t);
+			}
+		};
+
+		try {
+			new SeesawLockRequester(requestCallback).request(barcode, requestLifetime);
+		} catch (IOException e) {
+			requestCallback.onFailure(e);
+		}
 	}
-	
+
 	/*
 	 * Object finding
 	 */
@@ -1319,7 +1387,7 @@ public class PlayerClient {
 	 */
 
 	protected void publish(String routingKey, Map<String, Object> message, BasicProperties props) throws IOException {
-		channel.basicPublish(getGameID(), routingKey, props, prepareMessage(message));
+		channel.basicPublish(getGameID(), routingKey, props, serializeToJSON(message));
 	}
 
 	protected void publish(String routingKey, Map<String, Object> message) throws IOException {
@@ -1328,7 +1396,7 @@ public class PlayerClient {
 
 	protected void reply(BasicProperties requestProps, Map<String, Object> message) throws IOException {
 		BasicProperties props = defaultProps().correlationId(requestProps.getCorrelationId()).build();
-		channel.basicPublish("", requestProps.getReplyTo(), props, prepareMessage(message));
+		channel.basicPublish("", requestProps.getReplyTo(), props, serializeToJSON(message));
 	}
 
 	private AMQP.BasicProperties.Builder defaultProps() {
@@ -1344,7 +1412,7 @@ public class PlayerClient {
 		return message;
 	}
 
-	protected byte[] prepareMessage(Map<String, Object> message) {
+	protected byte[] serializeToJSON(Map<String, Object> message) {
 		// Default message
 		if (message == null) {
 			message = newMessage();
@@ -1352,6 +1420,58 @@ public class PlayerClient {
 
 		// Serialize map as JSON object
 		return new JSONWriter().write(message).getBytes();
+	}
+
+	/**
+	 * Requests a join and handles the responses.
+	 */
+	private class SeesawLockRequester extends VoteRequester {
+
+		private final Callback<Void> callback;
+
+		public SeesawLockRequester(Callback<Void> callback) throws IOException {
+			super(channel, requestProvider);
+			this.callback = callback;
+		}
+
+		public void request(int barcode, int timeout) throws IOException {
+			// Publish join with own player info
+			Map<String, Object> message = newMessage();
+			message.put("barcode", barcode);
+			request(getGameID(), Constants.SEESAW_REQUEST_LOCK, serializeToJSON(message), timeout);
+		}
+
+		@Override
+		protected int getRequiredVotes() {
+			// Short-circuit when game is full and all other players accepted
+			return nbPlayers - 1;
+		}
+
+		@Override
+		protected void onAccepted(Map<String, Object> message) {
+		}
+
+		@Override
+		protected void onRejected(Map<String, Object> message) {
+		}
+
+		@Override
+		protected void onSuccess() {
+			// Report success
+			callback.onSuccess(null);
+		}
+
+		@Override
+		protected void onFailure() {
+			// Report failure
+			callback.onFailure(new Exception("Lock request rejected"));
+		}
+
+		@Override
+		protected void handleTimeout() {
+			fail();
+		}
+
 	}
 
 	/**
@@ -1369,7 +1489,7 @@ public class PlayerClient {
 		public void request(int timeout) throws IOException {
 			// Publish join with own player info
 			Map<String, Object> message = createMessage();
-			request(getGameID(), Constants.JOIN, prepareMessage(message), timeout);
+			request(getGameID(), Constants.JOIN, serializeToJSON(message), timeout);
 		}
 
 		@Override
@@ -1519,18 +1639,24 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.HEARTBEAT)) {
 				// Heartbeat
 				heartbeatReceived(playerID);
-			} else if(topic.equals("seesawrequest")){
-				seesawRequest((int) message.get("barcode"));
+			} else if (topic.equals(Constants.SEESAW_REQUEST_LOCK)) {
+				answerSeesawRequest(message, props);
 			}
+
 		}
 
-		private void seesawRequest(int barcode) {
-			
+		private void answerSeesawRequest(Map<String, Object> message, BasicProperties props) throws IOException {
+			final Map<String, Object> response = newMessage();
+			if (hasLockOnSeesaw(((Number) message.get("barcode")).intValue()))
+				response.put(Constants.VOTE_RESULT, false);
+			else
+				response.put(Constants.VOTE_RESULT, true);
+
+			reply(props, response);
 		}
 
 	}
 
-	
 	/**
 	 * Handles team-specific messages.
 	 */
@@ -1571,7 +1697,7 @@ public class PlayerClient {
 		public void request(int timeout) throws IOException {
 			// Publish ping
 			Map<String, Object> message = newMessage();
-			request(getGameID(), toTeamTopic(Constants.TEAM_PING), prepareMessage(message), timeout);
+			request(getGameID(), toTeamTopic(Constants.TEAM_PING), serializeToJSON(message), timeout);
 		}
 
 		@Override
@@ -1588,8 +1714,5 @@ public class PlayerClient {
 		}
 
 	}
-	
-	
-
 
 }

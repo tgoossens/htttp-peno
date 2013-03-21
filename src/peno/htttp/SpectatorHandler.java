@@ -54,7 +54,7 @@ public interface SpectatorHandler extends GameHandler {
 	 * @param barcode
 	 *            The barcode read before accessing the seesaw
 	 */
-	public void lockSeesaw(String playerID, int playerNumber, int barcode);
+	public void lockedSeesaw(String playerID, int playerNumber, int barcode);
 
 	/**
 	 * Invoked when a player is done travelling over a seesaw
@@ -66,6 +66,6 @@ public interface SpectatorHandler extends GameHandler {
 	 * @param barcode
 	 *            The barcode read before accessing the seesaw
 	 */
-	public void unlockSeesaw(String playerID, int playerNumber, int barcode);
+	public void unlockedSeesaw(String playerID, int playerNumber, int barcode);
 
 }
