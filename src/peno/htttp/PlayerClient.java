@@ -338,7 +338,7 @@ public class PlayerClient {
 
 	/**
 	 * Check if the given player can join.
-	 * 
+	 * 	
 	 * @param playerID
 	 *            The player identifier.
 	 */
@@ -883,7 +883,38 @@ public class PlayerClient {
 		message.put(Constants.UPDATE_FOUND_OBJECT, hasFoundObject());
 		publish(Constants.UPDATE, message);
 	}
+	
+	
+	/** 
+	 * Seesaw
+	 */
 
+	/**
+	 * Publish notification that the player is about to traverse a seesaw.
+	 * 
+	 * This should be done after the barcode had been read and just before the player starts traversing the seesaw.
+	 * 
+	 * <p>
+	 * The player must provide the barcode that has been read in front of the seesaw. 
+	 * </p>
+	 * 
+	 * @param barcode
+	 * 	The barcode that has been read in front of the seesaw.
+	 * 
+	 * @throws IllegalStateException
+	 * @throws IOException
+	 */
+	public void traverseSeesaw(int barcode) throws IllegalStateException,IOException{
+		if (!isPlaying()) {
+			throw new IllegalStateException("Cannot traverse seesaw when not playing.");
+		}
+
+		Map<String, Object> message = newMessage();
+		message.put("barcode", barcode);
+		publish("seesaw", message);
+
+	}
+	
 	/*
 	 * Object finding
 	 */
@@ -1488,11 +1519,18 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.HEARTBEAT)) {
 				// Heartbeat
 				heartbeatReceived(playerID);
+			} else if(topic.equals("seesawrequest")){
+				seesawRequest((int) message.get("barcode"));
 			}
+		}
+
+		private void seesawRequest(int barcode) {
+			
 		}
 
 	}
 
+	
 	/**
 	 * Handles team-specific messages.
 	 */
@@ -1550,5 +1588,8 @@ public class PlayerClient {
 		}
 
 	}
+	
+	
+
 
 }
