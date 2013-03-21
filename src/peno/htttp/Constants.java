@@ -66,9 +66,12 @@ public interface Constants {
 	/*
 	 * Team
 	 */
+	public static final String TEAM_PING = "ping";
+	public static final String TEAM_TILE = "tile";
 	public static final String TEAM_MEET = "meet";
 	public static final String TEAM_MATCH = "match";
-	public static final String TEAM_PING = "ping";
+
+	public static final String TILES = "tiles";
 
 	/*
 	 * Voting
