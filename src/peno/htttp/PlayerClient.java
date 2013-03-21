@@ -1088,10 +1088,10 @@ public class PlayerClient {
 	 * @param teamNumber
 	 *            The team number.
 	 * @throws IllegalStateException
-	 *             If not playing.
+	 *             If not playing or already in a team.
 	 * @throws IOException
 	 */
-	public void joinTeam(int teamNumber) throws IOException {
+	public void joinTeam(int teamNumber) throws IllegalStateException, IOException {
 		if (!isPlaying()) {
 			throw new IllegalStateException("Cannot join team when not playing.");
 		}
@@ -1149,6 +1149,52 @@ public class PlayerClient {
 	 */
 	private void teamPingNoResponse() {
 		// Already listening
+	}
+
+	/**
+	 * Send maze tiles to the team partner.
+	 * 
+	 * @param tiles
+	 *            The tiles to send.
+	 * @throws IllegalStateException
+	 *             If not in any team yet, or if partner still unknown.
+	 * @throws IOException
+	 */
+	public void sendTiles(Collection<Tile> tiles) throws IOException {
+		if (!hasTeamNumber()) {
+			throw new IllegalStateException("Not in any team yet.");
+		}
+		if (!hasTeamPartner()) {
+			throw new IllegalStateException("Partner still unknown.");
+		}
+
+		// Build raw tiles list
+		List<List<Object>> rawTiles = new ArrayList<List<Object>>(tiles.size());
+		for (Tile tile : tiles) {
+			rawTiles.add(tile.write());
+		}
+
+		// Send tiles
+		Map<String, Object> message = newMessage();
+		message.put(Constants.TILES, rawTiles);
+		publish(toTeamTopic(Constants.TEAM_TILE), message);
+	}
+
+	/**
+	 * Called when tiles have been received.
+	 * 
+	 * @param message
+	 */
+	private void teamTilesReceived(Map<String, Object> message) {
+		@SuppressWarnings("unchecked")
+		List<List<Object>> rawTiles = (List<List<Object>>) message.get(Constants.TILES);
+		// Build tile objects
+		List<Tile> tiles = new ArrayList<Tile>(rawTiles.size());
+		for (List<Object> rawTile : rawTiles) {
+			tiles.add(Tile.read(rawTile));
+		}
+		// Call handler
+		handler.teamTilesReceived(tiles);
 	}
 
 	protected String toTeamTopic(String topic) {
@@ -1513,7 +1559,10 @@ public class PlayerClient {
 
 			if (topic.equals(Constants.TEAM_PING)) {
 				// Partner connected
-				PlayerClient.this.teamPingReceived(playerID, props);
+				teamPingReceived(playerID, props);
+			} else if (topic.equals(Constants.TEAM_TILE)) {
+				// Tiles received
+				teamTilesReceived(message);
 			} else if (topic.equals(Constants.TEAM_MATCH)) {
 				// TODO Match
 			} else if (topic.equals(Constants.TEAM_MEET)) {
@@ -1540,13 +1589,13 @@ public class PlayerClient {
 		protected void handleResponse(Map<String, Object> message, BasicProperties props) {
 			// Partner responded
 			String playerID = (String) message.get(Constants.PLAYER_ID);
-			PlayerClient.this.teamPongReceived(playerID);
+			teamPongReceived(playerID);
 		}
 
 		@Override
 		protected void handleTimeout() {
 			// Partner did not respond
-			PlayerClient.this.teamPingNoResponse();
+			teamPingNoResponse();
 		}
 
 	}
