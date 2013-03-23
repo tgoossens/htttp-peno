@@ -893,6 +893,13 @@ public class PlayerClient {
 	 */
 
 	/**
+	 * Check if the local player holds a lock on any seesaw.
+	 */
+	public boolean hasLockOnSeesaw() {
+		return seesawLock != 0;
+	}
+
+	/**
 	 * Check if the local player holds a lock on the given seesaw.
 	 * 
 	 * @param barcode
@@ -905,24 +912,23 @@ public class PlayerClient {
 	/**
 	 * Unlock a locked seesaw.
 	 * 
-	 * @param barcode
-	 *            The barcode at the player's side of the seesaw.
 	 * @throws IllegalStateException
 	 *             If the player has no lock on the seesaw.
 	 * @throws IOException
 	 */
-	public void unlockSeesaw(int barcode) throws IllegalStateException, IOException {
-		if (!hasLockOnSeesaw(barcode)) {
+	public void unlockSeesaw() throws IllegalStateException, IOException {
+		if (!hasLockOnSeesaw()) {
 			throw new IllegalStateException("Cannot unlock seesaw for which the player has no lock.");
 		}
 
 		// Remove lock
+		int unlockedBarcode = this.seesawLock;
 		this.seesawLock = 0;
 
 		// Publish unlock
 		Map<String, Object> message = newMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
-		message.put(Constants.SEESAW_BARCODE, barcode);
+		message.put(Constants.SEESAW_BARCODE, unlockedBarcode);
 		publish(Constants.SEESAW_UNLOCK, message);
 	}
 
@@ -952,8 +958,9 @@ public class PlayerClient {
 	 * 
 	 * <p>
 	 * The player must provide the barcode that has been read in front of the
-	 * seesaw. This to identify the seesaw and the direction in which the seesaw
-	 * will flip.
+	 * seesaw. This is used by other players to validate the request and by
+	 * listening spectators to identify the seesaw and the direction in which
+	 * the seesaw will flip.
 	 * </p>
 	 * 
 	 * @param barcode
@@ -961,7 +968,8 @@ public class PlayerClient {
 	 * @param callback
 	 *            A callback which receives the result of this request.
 	 * @throws IllegalStateException
-	 *             If not playing.
+	 *             If not playing, if still holding a lock on a different
+	 *             seesaw.
 	 * @throws IOException
 	 */
 	public void requestSeesawLock(final int barcode, final Callback<Boolean> callback) throws IllegalStateException,
@@ -976,7 +984,12 @@ public class PlayerClient {
 			return;
 		}
 
-		// Wrap the given callback to add extra side effects.
+		// Fail if player still holds a lock on another seesaw
+		if (hasLockOnSeesaw()) {
+			throw new IllegalStateException("Already holding a lock on a different seesaw.");
+		}
+
+		// Wrap the given callback to add extra side effects
 		final Callback<Boolean> requestCallback = new Callback<Boolean>() {
 			@Override
 			public void onSuccess(Boolean isGranted) {
