@@ -70,10 +70,8 @@ public class SpectatorClient {
 
 	/**
 	 * Stop spectating.
-	 * 
-	 * @throws IOException
 	 */
-	public void stop() throws IOException {
+	public void stop() {
 		// Shut down consumer
 		if (consumer != null) {
 			consumer.terminate();
