@@ -821,7 +821,7 @@ public class PlayerClient {
 			// Set as starting
 			setGameState(GameState.STARTING);
 			// Call handler
-			handler.gameRolled(getPlayerNumber());
+			handler.gameRolled(getPlayerNumber(), getObjectNumber());
 		}
 	}
 

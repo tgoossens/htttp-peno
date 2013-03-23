@@ -8,12 +8,14 @@ import java.util.List;
 public interface PlayerHandler extends GameHandler {
 
 	/**
-	 * Invoked when the player numbers have been rolled.
+	 * Invoked when the player and object numbers have been rolled.
 	 * 
 	 * @param playerNumber
 	 *            The local player's player number.
+	 * @param objectNumber
+	 *            The local player's object number.
 	 */
-	public void gameRolled(int playerNumber);
+	public void gameRolled(int playerNumber, int objectNumber);
 
 	/**
 	 * Invoked when the team partner has connected.
