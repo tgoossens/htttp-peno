@@ -86,13 +86,12 @@ public class PlayerClient {
 	 */
 	private ScheduledExecutorService heartbeatExecutor;
 	private ScheduledFuture<?> heartbeatTask;
+	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
 
 	/*
 	 * Seesaw
 	 */
-	private int seesawlock = 0;
-
-	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
+	private int seesawLock = 0;
 
 	/**
 	 * Create a game client.
@@ -889,45 +888,67 @@ public class PlayerClient {
 		publish(Constants.UPDATE, message);
 	}
 
-	/**
+	/*
 	 * Seesaw
 	 */
 
-	public boolean hasLockOnSeesaw(int barcode) {
-		return (this.seesawlock == barcode);
-	}
-
 	/**
-	 * Unlock a seesaw
+	 * Check if the local player holds a lock on the given seesaw.
 	 * 
 	 * @param barcode
-	 * @throws IOException
-	 *             If the unlock message could not be sent.
-	 * @throws Exception
-	 *             If the player has no lock
+	 *            The barcode at the player's side of the seesaw.
 	 */
-	public void unlockSeesaw(int barcode) throws Exception {
-		if (!hasLockOnSeesaw(barcode))
-			throw new Exception("You cannot unlock what's not locked");
-
-		this.seesawlock = 0;
-		
-		Map<String, Object> message = newMessage();
-		message.put("barcode", barcode);
-		message.put("playerNumber", getPlayerNumber());
-		publish(Constants.SEESAW_UNLOCK, message);
-		
+	public boolean hasLockOnSeesaw(int barcode) {
+		return seesawLock == barcode;
 	}
 
 	/**
-	 * Request a lock on a seesaw. When the lock is granted onSuccess will be
-	 * called on the given callback.
+	 * Unlock a locked seesaw.
 	 * 
-	 * This should be done after the barcode in front of the seesaw has been
-	 * read and just before the player starts traversing the seesaw.
+	 * @param barcode
+	 *            The barcode at the player's side of the seesaw.
+	 * @throws IllegalStateException
+	 *             If the player has no lock on the seesaw.
+	 * @throws IOException
+	 */
+	public void unlockSeesaw(int barcode) throws IllegalStateException, IOException {
+		if (!hasLockOnSeesaw(barcode)) {
+			throw new IllegalStateException("Cannot unlock seesaw for which the player has no lock.");
+		}
+
+		// Remove lock
+		this.seesawLock = 0;
+
+		// Publish unlock
+		Map<String, Object> message = newMessage();
+		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
+		message.put(Constants.SEESAW_BARCODE, barcode);
+		publish(Constants.SEESAW_UNLOCK, message);
+	}
+
+	/**
+	 * Request a lock on a seesaw.
 	 * 
-	 * On no account should a player be allowed to traverse a seesaw if no lock
-	 * is granted.
+	 * <p>
+	 * A lock should be requested after the barcode in front of the seesaw has
+	 * been read and just before the player wants to traverse the seesaw.
+	 * </p>
+	 * 
+	 * <ul>
+	 * <li>If the lock is granted, the success callback will receive
+	 * {@code true} as result.</li>
+	 * <li>If the lock is rejected, the success callback receives a
+	 * {@code false} result.</li>
+	 * <li>If an exception occurs during the request, the failure callback is
+	 * called.</li>
+	 * </ul>
+	 * 
+	 * <p>
+	 * <strong>Under no circumstance should the player traverse a seesaw when it
+	 * does not have a lock on it.</strong> If the lock is rejected or the
+	 * request fails, the player should back away from the seesaw and attempt a
+	 * different route.
+	 * </p>
 	 * 
 	 * <p>
 	 * The player must provide the barcode that has been read in front of the
@@ -936,49 +957,70 @@ public class PlayerClient {
 	 * </p>
 	 * 
 	 * @param barcode
+	 *            The barcode at the player's side of the seesaw.
 	 * @param callback
+	 *            A callback which receives the result of this request.
+	 * @throws IllegalStateException
+	 *             If not playing.
+	 * @throws IOException
 	 */
-	public void requestSeesawLock(final int barcode, final Callback<Void> callback) {
+	public void requestSeesawLock(final int barcode, final Callback<Boolean> callback) throws IllegalStateException,
+			IOException {
+		if (!isPlaying()) {
+			throw new IllegalStateException("Cannot request seesaw lock when not playing.");
+		}
 
-		// if a lock was already granted return with success.
+		// Report success if lock was already granted
 		if (hasLockOnSeesaw(barcode)) {
-			callback.onSuccess(null);
+			callback.onSuccess(true);
 			return;
 		}
 
-		/*
-		 * Wrap the given callback to add extra side effects.
-		 */
-		final Callback<Void> requestCallback = new Callback<Void>() {
-
+		// Wrap the given callback to add extra side effects.
+		final Callback<Boolean> requestCallback = new Callback<Boolean>() {
 			@Override
-			public void onSuccess(Void result) {
-				// grant the lock
-				PlayerClient.this.seesawlock = barcode;
-				final Map<String,Object> message = newMessage();
-				message.put("barcode", barcode);
-				message.put("playerNumber", getPlayerNumber());
-				try {
-					publish(Constants.SEESAW_LOCK,message);
-				} catch (IOException e) {
-					e.printStackTrace();
+			public void onSuccess(Boolean isGranted) {
+				if (isGranted) {
+					// Lock granted
+					seesawLock = barcode;
+					// Publish lock
+					final Map<String, Object> message = newMessage();
+					message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
+					message.put(Constants.SEESAW_BARCODE, barcode);
+					try {
+						publish(Constants.SEESAW_LOCK, message);
+						callback.onSuccess(true);
+					} catch (IOException e) {
+						callback.onFailure(e);
+					}
+				} else {
+					// Lock rejected
+					callback.onSuccess(false);
 				}
-				callback.onSuccess(result);
-
 			}
 
 			@Override
 			public void onFailure(Throwable t) {
-
 				callback.onFailure(t);
 			}
 		};
 
-		try {
-			new SeesawLockRequester(requestCallback).request(barcode, requestLifetime);
-		} catch (IOException e) {
-			requestCallback.onFailure(e);
-		}
+		// Request lock
+		new SeesawLockRequester(requestCallback).request(barcode, requestLifetime);
+	}
+
+	/**
+	 * Reply to a seesaw request.
+	 */
+	private void handleSeesawRequest(Map<String, Object> message, BasicProperties props) throws IOException {
+		// Check if this player has a lock on the requested seesaw
+		int barcode = ((Number) message.get("barcode")).intValue();
+		boolean hasLock = hasLockOnSeesaw(barcode);
+
+		// Reply to request
+		final Map<String, Object> response = newMessage();
+		response.put(Constants.VOTE_RESULT, !hasLock);
+		reply(props, response);
 	}
 
 	/*
@@ -1425,9 +1467,9 @@ public class PlayerClient {
 	 */
 	private class SeesawLockRequester extends VoteRequester {
 
-		private final Callback<Void> callback;
+		private final Callback<Boolean> callback;
 
-		public SeesawLockRequester(Callback<Void> callback) throws IOException {
+		public SeesawLockRequester(Callback<Boolean> callback) throws IOException {
 			super(channel, requestProvider);
 			this.callback = callback;
 		}
@@ -1456,13 +1498,13 @@ public class PlayerClient {
 		@Override
 		protected void onSuccess() {
 			// Report success
-			callback.onSuccess(null);
+			callback.onSuccess(true);
 		}
 
 		@Override
 		protected void onFailure() {
 			// Report failure
-			callback.onFailure(new Exception("Lock request rejected"));
+			callback.onSuccess(false);
 		}
 
 		@Override
@@ -1638,19 +1680,10 @@ public class PlayerClient {
 				// Heartbeat
 				heartbeatReceived(playerID);
 			} else if (topic.equals(Constants.SEESAW_REQUEST_LOCK)) {
-				answerSeesawRequest(message, props);
+				// Seesaw lock requested
+				handleSeesawRequest(message, props);
 			}
 
-		}
-
-		private void answerSeesawRequest(Map<String, Object> message, BasicProperties props) throws IOException {
-			final Map<String, Object> response = newMessage();
-			if (hasLockOnSeesaw(((Number) message.get("barcode")).intValue()))
-				response.put(Constants.VOTE_RESULT, false);
-			else
-				response.put(Constants.VOTE_RESULT, true);
-
-			reply(props, response);
 		}
 
 	}
