@@ -135,7 +135,18 @@ public class SpectatorClient {
 				// Player found their object
 				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
 				handler.playerFoundObject(playerID, playerNumber);
+			} else if (topic.equals(Constants.SEESAW_LOCK)) {
+				// Player has locked seesaw
+				int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				int barcode = ((Number) message.get("barcode")).intValue();
+				handler.lockedSeesaw(playerID, playerNumber, barcode);
+			} else if (topic.equals(Constants.SEESAW_UNLOCK)) {
+				// Player has unlocked seesaw
+				int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				int barcode = ((Number) message.get("barcode")).intValue();
+				handler.unlockedSeesaw(playerID, playerNumber, barcode);
 			}
+
 		}
 
 	}
