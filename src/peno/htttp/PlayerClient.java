@@ -1700,10 +1700,6 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.TEAM_TILE)) {
 				// Tiles received
 				teamTilesReceived(message);
-			} else if (topic.equals(Constants.TEAM_MATCH)) {
-				// TODO Match
-			} else if (topic.equals(Constants.TEAM_MEET)) {
-				// TODO Meet
 			}
 
 		}
