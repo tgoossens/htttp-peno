@@ -36,4 +36,36 @@ public interface SpectatorHandler extends GameHandler {
 	 */
 	public void playerUpdate(String playerID, int playerNumber, double x, double y, double angle, boolean foundObject);
 
+	/**
+	 * Invoked when a player is about to travel over a seesaw.
+	 * 
+	 * <p>
+	 * The player will provide the barcode he read in front of the seesaw he
+	 * wants to access. Based on the position of the player and the barcode it
+	 * is possible to derive <br>
+	 * 1. Which seesaw the robot is crossing. <br>
+	 * 2. In what direction the seesaw must flip
+	 * </p>
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 * @param playerNumber
+	 *            The player number.
+	 * @param barcode
+	 *            The barcode read before accessing the seesaw
+	 */
+	public void lockedSeesaw(String playerID, int playerNumber, int barcode);
+
+	/**
+	 * Invoked when a player is done travelling over a seesaw
+	 * 
+	 * @param playerID
+	 *            The player identifier.
+	 * @param playerNumber
+	 *            The player number.
+	 * @param barcode
+	 *            The barcode read before accessing the seesaw
+	 */
+	public void unlockedSeesaw(String playerID, int playerNumber, int barcode);
+
 }
