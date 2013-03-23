@@ -15,7 +15,6 @@ public interface Constants {
 	/*
 	 * Seesaw
 	 */
-	public static final String SEESAW_REQUEST_LOCK = "seesawRequest";
 	public static final String SEESAW_LOCK = "seesawLock";
 	public static final String SEESAW_UNLOCK = "seesawUnlock";
 
