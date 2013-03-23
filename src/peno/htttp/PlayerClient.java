@@ -922,8 +922,8 @@ public class PlayerClient {
 		}
 
 		// Remove lock
-		int unlockedBarcode = this.seesawLock;
-		this.seesawLock = 0;
+		int unlockedBarcode = seesawLock;
+		seesawLock = 0;
 
 		// Publish unlock
 		Map<String, Object> message = newMessage();
@@ -933,54 +933,41 @@ public class PlayerClient {
 	}
 
 	/**
-	 * Request a lock on a seesaw.
+	 * Lock a seesaw.
 	 * 
 	 * <p>
 	 * A lock should be requested after the barcode in front of the seesaw has
 	 * been read and just before the player wants to traverse the seesaw.
 	 * </p>
 	 * 
-	 * <ul>
-	 * <li>If the lock is granted, the success callback will receive
-	 * {@code true} as result.</li>
-	 * <li>If the lock is rejected, the success callback receives a
-	 * {@code false} result.</li>
-	 * <li>If an exception occurs during the request, the failure callback is
-	 * called.</li>
-	 * </ul>
-	 * 
 	 * <p>
-	 * <strong>Under no circumstance should the player traverse a seesaw when it
-	 * does not have a lock on it.</strong> If the lock is rejected or the
-	 * request fails, the player should back away from the seesaw and attempt a
-	 * different route.
+	 * The player is responsible for checking that:
+	 * <ul>
+	 * <li>the seesaw is open</li>
+	 * <li>no players are on the seesaw</li>
+	 * </ul>
 	 * </p>
 	 * 
 	 * <p>
 	 * The player must provide the barcode that has been read in front of the
-	 * seesaw. This is used by other players to validate the request and by
-	 * listening spectators to identify the seesaw and the direction in which
-	 * the seesaw will flip.
+	 * seesaw. This is used by listening spectators to identify the seesaw and
+	 * the direction in which the seesaw will flip.
 	 * </p>
 	 * 
 	 * @param barcode
 	 *            The barcode at the player's side of the seesaw.
-	 * @param callback
-	 *            A callback which receives the result of this request.
 	 * @throws IllegalStateException
 	 *             If not playing, or if still holding a lock on a different
 	 *             seesaw.
 	 * @throws IOException
 	 */
-	public void requestSeesawLock(final int barcode, final Callback<Boolean> callback) throws IllegalStateException,
-			IOException {
+	public void lockSeesaw(final int barcode) throws IllegalStateException, IOException {
 		if (!isPlaying()) {
-			throw new IllegalStateException("Cannot request seesaw lock when not playing.");
+			throw new IllegalStateException("Cannot lock seesaw when not playing.");
 		}
 
-		// Report success if lock was already granted
+		// Ignore if lock already acquired
 		if (hasLockOnSeesaw(barcode)) {
-			callback.onSuccess(true);
 			return;
 		}
 
@@ -989,51 +976,14 @@ public class PlayerClient {
 			throw new IllegalStateException("Already holding a lock on a different seesaw.");
 		}
 
-		// Wrap the given callback to add extra side effects
-		final Callback<Boolean> requestCallback = new Callback<Boolean>() {
-			@Override
-			public void onSuccess(Boolean isGranted) {
-				if (isGranted) {
-					// Lock granted
-					seesawLock = barcode;
-					// Publish lock
-					final Map<String, Object> message = newMessage();
-					message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
-					message.put(Constants.SEESAW_BARCODE, barcode);
-					try {
-						publish(Constants.SEESAW_LOCK, message);
-						callback.onSuccess(true);
-					} catch (IOException e) {
-						callback.onFailure(e);
-					}
-				} else {
-					// Lock rejected
-					callback.onSuccess(false);
-				}
-			}
+		// Store lock
+		seesawLock = barcode;
 
-			@Override
-			public void onFailure(Throwable t) {
-				callback.onFailure(t);
-			}
-		};
-
-		// Request lock
-		new SeesawLockRequester(requestCallback).request(barcode, requestLifetime);
-	}
-
-	/**
-	 * Reply to a seesaw request.
-	 */
-	private void handleSeesawRequest(Map<String, Object> message, BasicProperties props) throws IOException {
-		// Check if this player has a lock on the requested seesaw
-		int barcode = ((Number) message.get("barcode")).intValue();
-		boolean hasLock = hasLockOnSeesaw(barcode);
-
-		// Reply to request
-		final Map<String, Object> response = newMessage();
-		response.put(Constants.VOTE_RESULT, !hasLock);
-		reply(props, response);
+		// Publish lock
+		final Map<String, Object> message = newMessage();
+		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
+		message.put(Constants.SEESAW_BARCODE, barcode);
+		publish(Constants.SEESAW_LOCK, message);
 	}
 
 	/*
@@ -1478,58 +1428,6 @@ public class PlayerClient {
 	/**
 	 * Requests a join and handles the responses.
 	 */
-	private class SeesawLockRequester extends VoteRequester {
-
-		private final Callback<Boolean> callback;
-
-		public SeesawLockRequester(Callback<Boolean> callback) throws IOException {
-			super(channel, requestProvider);
-			this.callback = callback;
-		}
-
-		public void request(int barcode, int timeout) throws IOException {
-			// Publish join with own player info
-			Map<String, Object> message = newMessage();
-			message.put("barcode", barcode);
-			request(getGameID(), Constants.SEESAW_REQUEST_LOCK, serializeToJSON(message), timeout);
-		}
-
-		@Override
-		protected int getRequiredVotes() {
-			// Short-circuit when game is full and all other players accepted
-			return nbPlayers - 1;
-		}
-
-		@Override
-		protected void onAccepted(Map<String, Object> message) {
-		}
-
-		@Override
-		protected void onRejected(Map<String, Object> message) {
-		}
-
-		@Override
-		protected void onSuccess() {
-			// Report success
-			callback.onSuccess(true);
-		}
-
-		@Override
-		protected void onFailure() {
-			// Report failure
-			callback.onSuccess(false);
-		}
-
-		@Override
-		protected void handleTimeout() {
-			fail();
-		}
-
-	}
-
-	/**
-	 * Requests a join and handles the responses.
-	 */
 	private class JoinRequester extends VoteRequester {
 
 		private final Callback<Void> callback;
@@ -1692,9 +1590,6 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.HEARTBEAT)) {
 				// Heartbeat
 				heartbeatReceived(playerID);
-			} else if (topic.equals(Constants.SEESAW_REQUEST_LOCK)) {
-				// Seesaw lock requested
-				handleSeesawRequest(message, props);
 			}
 
 		}
