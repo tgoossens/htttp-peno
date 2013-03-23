@@ -913,12 +913,12 @@ public class PlayerClient {
 	 * Unlock a locked seesaw.
 	 * 
 	 * @throws IllegalStateException
-	 *             If the player has no lock on the seesaw.
+	 *             If the player has no lock on a seesaw.
 	 * @throws IOException
 	 */
 	public void unlockSeesaw() throws IllegalStateException, IOException {
 		if (!hasLockOnSeesaw()) {
-			throw new IllegalStateException("Cannot unlock seesaw for which the player has no lock.");
+			throw new IllegalStateException("Cannot unlock seesaw when not holding any lock.");
 		}
 
 		// Remove lock
@@ -968,7 +968,7 @@ public class PlayerClient {
 	 * @param callback
 	 *            A callback which receives the result of this request.
 	 * @throws IllegalStateException
-	 *             If not playing, if still holding a lock on a different
+	 *             If not playing, or if still holding a lock on a different
 	 *             seesaw.
 	 * @throws IOException
 	 */
