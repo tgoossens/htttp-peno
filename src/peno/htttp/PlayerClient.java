@@ -942,7 +942,6 @@ public class PlayerClient {
 
 		// if a lock was already granted return with success.
 		if (hasLockOnSeesaw(barcode)) {
-			System.err.println("has already lock");
 			callback.onSuccess(null);
 			return;
 		}
@@ -964,7 +963,6 @@ public class PlayerClient {
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-				System.err.println("onsuccess lock");
 				callback.onSuccess(result);
 
 			}
