@@ -711,7 +711,7 @@ public class PlayerClient {
 	 */
 
 	/**
-	 * Get the local player's number to identify its object.
+	 * Get the local player's number.
 	 * 
 	 * @throws IllegalStateException
 	 *             If not determined yet.
@@ -833,7 +833,7 @@ public class PlayerClient {
 		// Generate player numbers
 		playerNumbers.clear();
 		for (int i = 0; i < nbPlayers; ++i) {
-			playerNumbers.put(rolls[i].getPlayerID(), i);
+			playerNumbers.put(rolls[i].getPlayerID(), i + 1);
 		}
 	}
 
@@ -887,6 +887,26 @@ public class PlayerClient {
 	/*
 	 * Object finding
 	 */
+
+	/**
+	 * Get the local player's object number to identify its object.
+	 * 
+	 * @throws IllegalStateException
+	 *             If not determined yet.
+	 */
+	public int getObjectNumber() throws IllegalStateException {
+		if (!hasObjectNumber()) {
+			throw new IllegalStateException("Object number not determined yet.");
+		}
+		return getPlayerNumber() - 1;
+	}
+
+	/**
+	 * Check if the object number has been determined.
+	 */
+	public boolean hasObjectNumber() {
+		return hasPlayerNumber();
+	}
 
 	/**
 	 * Check whether the local player has found their object.
