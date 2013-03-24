@@ -11,6 +11,7 @@ public interface Constants {
 	public static final String PLAYER_ID = "playerID";
 	public static final String CLIENT_ID = "clientID";
 	public static final String PLAYER_NUMBER = "playerNumber";
+	public static final String TEAM_NUMBER = "teamNumber";
 
 	/*
 	 * Seesaw
@@ -50,11 +51,12 @@ public interface Constants {
 	public static final String READY = "ready";
 
 	/*
-	 * Start/stop/pause
+	 * Game
 	 */
 	public static final String START = "start";
 	public static final String STOP = "stop";
 	public static final String PAUSE = "pause";
+	public static final String WIN = "win";
 
 	/*
 	 * Reports

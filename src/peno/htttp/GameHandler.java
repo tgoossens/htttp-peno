@@ -29,6 +29,14 @@ public interface GameHandler {
 	public void gamePaused();
 
 	/**
+	 * Invoked when the game has been won.
+	 * 
+	 * @param teamNumber
+	 *            The winning team's number.
+	 */
+	public void gameWon(int teamNumber);
+
+	/**
 	 * Invoked when a player attempts to join the game.
 	 * 
 	 * @param playerID
