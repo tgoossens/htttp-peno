@@ -26,6 +26,18 @@ public interface PlayerHandler extends GameHandler {
 	public void teamConnected(String partnerID);
 
 	/**
+	 * Invoked when the team partner updates their position.
+	 * 
+	 * @param x
+	 *            The X-coordinate of the partner's position.
+	 * @param y
+	 *            The Y-coordinate of the partner's position.
+	 * @param angle
+	 *            The angle of the partner's orientation.
+	 */
+	public void teamPosition(double x, double y, double angle);
+
+	/**
 	 * Invoked when maze tiles have been received from the team partner.
 	 * 
 	 * @param tiles

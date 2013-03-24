@@ -1670,6 +1670,14 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.HEARTBEAT)) {
 				// Heartbeat
 				heartbeatReceived(playerID);
+			} else if (topic.equals(Constants.UPDATE)) {
+				if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
+					// Partner updated their position
+					double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
+					double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+					double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
+					handler.teamPosition(x, y, angle);
+				}
 			}
 
 		}
