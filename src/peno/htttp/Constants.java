@@ -44,6 +44,7 @@ public interface Constants {
 	 */
 	public static final String ROLL = "roll";
 	public static final String ROLL_NUMBER = "roll";
+	public static final String ROLLED = "rolled";
 
 	/*
 	 * Ready
