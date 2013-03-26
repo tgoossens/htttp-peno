@@ -6,6 +6,19 @@ package peno.htttp;
 public interface SpectatorHandler extends GameHandler {
 
 	/**
+	 * Invoked when a player has determined their player number.
+	 * 
+	 * <p>
+	 * Listening spectators simulating the world can use this to position the
+	 * player on its starting position in the world before starting the game.
+	 * </p>
+	 * 
+	 * @param playerID
+	 * @param playerNumber
+	 */
+	public void playerRolled(String playerID, int playerNumber);
+
+	/**
 	 * Invoked when a player updates its state.
 	 * 
 	 * <p>

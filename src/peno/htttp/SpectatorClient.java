@@ -123,6 +123,10 @@ public class SpectatorClient {
 				// Player ready
 				boolean isReady = (Boolean) message.get(Constants.IS_READY);
 				handler.playerReady(playerID, isReady);
+			} else if (topic.equals(Constants.ROLLED)) {
+				// Player rolled their number
+				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				handler.playerRolled(playerID, playerNumber);
 			} else if (topic.equals(Constants.UPDATE)) {
 				// Player updated their state
 				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
