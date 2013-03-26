@@ -2,8 +2,12 @@ package peno.htttp;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 import peno.htttp.impl.Consumer;
+import peno.htttp.impl.NamedThreadFactory;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
@@ -22,6 +26,8 @@ public class SpectatorClient {
 	private Channel channel;
 	private final SpectatorHandler handler;
 	private Consumer consumer;
+	private final ExecutorService handlerExecutor;
+	private static final ThreadFactory handlerFactory = new NamedThreadFactory("HTTTP-SpectatorHandler-%d");
 
 	/*
 	 * Identifiers
@@ -43,6 +49,8 @@ public class SpectatorClient {
 		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
+
+		this.handlerExecutor = Executors.newCachedThreadPool(handlerFactory);
 	}
 
 	/**
@@ -99,56 +107,117 @@ public class SpectatorClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
-			String playerID = (String) message.get(Constants.PLAYER_ID);
+			final String playerID = (String) message.get(Constants.PLAYER_ID);
 			if (topic.equals(Constants.START)) {
 				// Game started
-				handler.gameStarted();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.gameStarted();
+					}
+				});
 			} else if (topic.equals(Constants.STOP)) {
 				// Game stopped
-				handler.gameStopped();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.gameStopped();
+					}
+				});
 			} else if (topic.equals(Constants.PAUSE)) {
 				// Game paused
-				handler.gamePaused();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.gamePaused();
+					}
+				});
 			} else if (topic.equals(Constants.JOIN)) {
 				// Player joining
-				handler.playerJoining(playerID);
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerJoining(playerID);
+					}
+				});
 			} else if (topic.equals(Constants.JOINED)) {
 				// Player joined
-				handler.playerJoined(playerID);
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerJoined(playerID);
+					}
+				});
 			} else if (topic.equals(Constants.DISCONNECT)) {
 				// Player disconnected
-				DisconnectReason reason = DisconnectReason.valueOf((String) message.get(Constants.DISCONNECT_REASON));
-				handler.playerDisconnected(playerID, reason);
+				final DisconnectReason reason = DisconnectReason.valueOf((String) message
+						.get(Constants.DISCONNECT_REASON));
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerDisconnected(playerID, reason);
+					}
+				});
 			} else if (topic.equals(Constants.READY)) {
 				// Player ready
-				boolean isReady = (Boolean) message.get(Constants.IS_READY);
-				handler.playerReady(playerID, isReady);
+				final boolean isReady = (Boolean) message.get(Constants.IS_READY);
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerReady(playerID, isReady);
+					}
+				});
 			} else if (topic.equals(Constants.ROLLED)) {
 				// Player rolled their number
-				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
-				handler.playerRolled(playerID, playerNumber);
+				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerRolled(playerID, playerNumber);
+					}
+				});
 			} else if (topic.equals(Constants.UPDATE)) {
 				// Player updated their state
-				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
-				double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
-				double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
-				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
-				boolean foundObject = (Boolean) message.get(Constants.UPDATE_FOUND_OBJECT);
-				handler.playerUpdate(playerID, playerNumber, x, y, angle, foundObject);
+				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				final double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
+				final double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+				final double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
+				final boolean foundObject = (Boolean) message.get(Constants.UPDATE_FOUND_OBJECT);
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerUpdate(playerID, playerNumber, x, y, angle, foundObject);
+					}
+				});
 			} else if (topic.equals(Constants.FOUND_OBJECT)) {
 				// Player found their object
-				int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
-				handler.playerFoundObject(playerID, playerNumber);
+				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerFoundObject(playerID, playerNumber);
+					}
+				});
 			} else if (topic.equals(Constants.SEESAW_LOCK)) {
 				// Player has locked seesaw
-				int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				int barcode = ((Number) message.get("barcode")).intValue();
-				handler.lockedSeesaw(playerID, playerNumber, barcode);
+				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				final int barcode = ((Number) message.get("barcode")).intValue();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.lockedSeesaw(playerID, playerNumber, barcode);
+					}
+				});
 			} else if (topic.equals(Constants.SEESAW_UNLOCK)) {
 				// Player has unlocked seesaw
-				int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				int barcode = ((Number) message.get("barcode")).intValue();
-				handler.unlockedSeesaw(playerID, playerNumber, barcode);
+				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
+				final int barcode = ((Number) message.get("barcode")).intValue();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.unlockedSeesaw(playerID, playerNumber, barcode);
+					}
+				});
 			}
 
 		}

@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -57,6 +58,8 @@ public class PlayerClient {
 	private Consumer joinConsumer;
 	private Consumer publicConsumer;
 	private Consumer teamConsumer;
+	private final ExecutorService handlerExecutor;
+	private static final ThreadFactory handlerFactory = new NamedThreadFactory("HTTTP-PlayerHandler-%d");
 
 	/*
 	 * Team communication
@@ -114,6 +117,8 @@ public class PlayerClient {
 
 		String clientID = UUID.randomUUID().toString();
 		this.localPlayer = new PlayerState(clientID, playerID);
+
+		this.handlerExecutor = Executors.newCachedThreadPool(handlerFactory);
 	}
 
 	/**
@@ -382,7 +387,7 @@ public class PlayerClient {
 		}
 	}
 
-	private void playerJoining(String clientID, String playerID, BasicProperties props) throws IOException {
+	private void playerJoining(String clientID, final String playerID, BasicProperties props) throws IOException {
 		// Retrieve game state before voting
 		Map<String, Object> gameState = writeGameState();
 
@@ -408,14 +413,24 @@ public class PlayerClient {
 		reply(props, reply);
 
 		// Call handler
-		handler.playerJoining(playerID);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.playerJoining(playerID);
+			}
+		});
 	}
 
-	private synchronized void playerJoined(String clientID, String playerID) throws IOException {
+	private synchronized void playerJoined(String clientID, final String playerID) throws IOException {
 		// Confirm player
 		confirmPlayer(clientID, playerID, false);
 		// Call handler
-		handler.playerJoined(playerID);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.playerJoined(playerID);
+			}
+		});
 		// Try to roll
 		tryRoll();
 	}
@@ -469,14 +484,12 @@ public class PlayerClient {
 		}
 	}
 
-	private synchronized void playerDisconnected(String clientID, String playerID, DisconnectReason reason) {
+	private synchronized void playerDisconnected(final String clientID, final String playerID,
+			final DisconnectReason reason) {
 		// Ignore if player has already disconnected
 		// Can occur when receiving multiple heart beat timeout disconnects
 		if (!isPlayerConnected(clientID, playerID))
 			return;
-
-		// Call handler
-		handler.playerDisconnected(playerID, reason);
 
 		switch (getGameState()) {
 		case JOINING:
@@ -504,6 +517,14 @@ public class PlayerClient {
 		default:
 			break;
 		}
+
+		// Call handler
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.playerDisconnected(playerID, reason);
+			}
+		});
 	}
 
 	/*
@@ -574,11 +595,16 @@ public class PlayerClient {
 		}
 	}
 
-	private void playerReady(String playerID, boolean isReady) throws IOException {
+	private void playerReady(final String playerID, final boolean isReady) throws IOException {
 		// Set ready state
 		getPlayer(playerID).setReady(isReady);
 		// Call handler
-		handler.playerReady(playerID, isReady);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.playerReady(playerID, isReady);
+			}
+		});
 
 		if (isReady) {
 			// Try to start
@@ -628,7 +654,12 @@ public class PlayerClient {
 		// Update game state
 		setGameState(GameState.PLAYING);
 		// Call handler
-		handler.gameStarted();
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.gameStarted();
+			}
+		});
 	}
 
 	/**
@@ -667,7 +698,12 @@ public class PlayerClient {
 		// Set as not ready
 		setReady(false);
 		// Call handler
-		handler.gameStopped();
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.gameStopped();
+			}
+		});
 	}
 
 	/**
@@ -707,7 +743,12 @@ public class PlayerClient {
 		// Update game state
 		setGameState(GameState.PAUSED);
 		// Call handler
-		handler.gamePaused();
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.gamePaused();
+			}
+		});
 	}
 
 	/*
@@ -827,7 +868,12 @@ public class PlayerClient {
 			// Publish rolled
 			publishRolled();
 			// Call handler
-			handler.gameRolled(getPlayerNumber(), getObjectNumber());
+			handlerExecutor.submit(new Runnable() {
+				@Override
+				public void run() {
+					handler.gameRolled(getPlayerNumber(), getObjectNumber());
+				}
+			});
 		}
 	}
 
@@ -894,6 +940,20 @@ public class PlayerClient {
 		message.put(Constants.UPDATE_ANGLE, angle);
 		message.put(Constants.UPDATE_FOUND_OBJECT, hasFoundObject());
 		publish(Constants.UPDATE, message);
+	}
+
+	/**
+	 * Invoked when a position update is received.
+	 */
+	private void updateReceived(String playerID, final double x, final double y, final double angle) {
+		if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
+			handlerExecutor.submit(new Runnable() {
+				@Override
+				public void run() {
+					handler.teamPosition(x, y, angle);
+				}
+			});
+		}
 	}
 
 	/*
@@ -1033,8 +1093,14 @@ public class PlayerClient {
 		// This includes the local player
 		for (PlayerState player : players.getConfirmed()) {
 			if (player.hasFoundObject()) {
-				String playerID = player.getPlayerID();
-				handler.playerFoundObject(playerID, playerNumbers.get(playerID));
+				final String playerID = player.getPlayerID();
+				final int playerNumber = playerNumbers.get(playerID);
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.playerFoundObject(playerID, playerNumber);
+					}
+				});
 			}
 		}
 	}
@@ -1064,13 +1130,18 @@ public class PlayerClient {
 		publish(Constants.FOUND_OBJECT, message);
 	}
 
-	private void playerFoundObject(String playerID) {
+	private void playerFoundObject(final String playerID) {
 		// Mark object as found
 		getPlayer(playerID).setFoundObject(true);
 
 		// Call handler
-		int playerNumber = playerNumbers.get(playerID);
-		handler.playerFoundObject(playerID, playerNumber);
+		final int playerNumber = playerNumbers.get(playerID);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.playerFoundObject(playerID, playerNumber);
+			}
+		});
 	}
 
 	/*
@@ -1250,7 +1321,7 @@ public class PlayerClient {
 	 * @param playerID
 	 * @throws IOException
 	 */
-	private void teamPingReceived(String playerID, BasicProperties props) throws IOException {
+	private void teamPingReceived(final String playerID, BasicProperties props) throws IOException {
 		// Store team partner
 		this.teamPartner = playerID;
 
@@ -1258,7 +1329,12 @@ public class PlayerClient {
 		reply(props, newMessage());
 
 		// Start communicating
-		handler.teamConnected(playerID);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.teamConnected(playerID);
+			}
+		});
 	}
 
 	/**
@@ -1266,12 +1342,17 @@ public class PlayerClient {
 	 * 
 	 * @param playerID
 	 */
-	private void teamPongReceived(String playerID) {
+	private void teamPongReceived(final String playerID) {
 		// Store team partner
 		this.teamPartner = playerID;
 
 		// Start communicating
-		handler.teamConnected(playerID);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.teamConnected(playerID);
+			}
+		});
 	}
 
 	/**
@@ -1333,12 +1414,17 @@ public class PlayerClient {
 		@SuppressWarnings("unchecked")
 		List<List<Object>> rawTiles = (List<List<Object>>) message.get(Constants.TILES);
 		// Build tile objects
-		List<Tile> tiles = new ArrayList<Tile>(rawTiles.size());
+		final List<Tile> tiles = new ArrayList<Tile>(rawTiles.size());
 		for (List<Object> rawTile : rawTiles) {
 			tiles.add(Tile.read(rawTile));
 		}
 		// Call handler
-		handler.teamTilesReceived(tiles);
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.teamTilesReceived(tiles);
+			}
+		});
 	}
 
 	protected String toTeamTopic(String topic) {
@@ -1711,13 +1797,11 @@ public class PlayerClient {
 				// Heartbeat
 				heartbeatReceived(playerID);
 			} else if (topic.equals(Constants.UPDATE)) {
-				if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
-					// Partner updated their position
-					double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
-					double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
-					double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
-					handler.teamPosition(x, y, angle);
-				}
+				// Player updated their position
+				double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
+				double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
+				updateReceived(playerID, x, y, angle);
 			}
 
 		}
