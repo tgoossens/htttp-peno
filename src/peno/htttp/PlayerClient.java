@@ -824,6 +824,8 @@ public class PlayerClient {
 			sortPlayerRolls();
 			// Set as starting
 			setGameState(GameState.STARTING);
+			// Publish rolled
+			publishRolled();
 			// Call handler
 			handler.gameRolled(getPlayerNumber(), getObjectNumber());
 		}
@@ -839,6 +841,12 @@ public class PlayerClient {
 		for (int i = 0; i < nbPlayers; ++i) {
 			playerNumbers.put(rolls[i].getPlayerID(), i + 1);
 		}
+	}
+
+	private void publishRolled() throws IOException {
+		Map<String, Object> message = newMessage();
+		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
+		publish(Constants.ROLLED, message);
 	}
 
 	private void replacePlayerNumbers(Map<String, Integer> numbers) {

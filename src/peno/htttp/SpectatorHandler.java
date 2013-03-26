@@ -5,6 +5,8 @@ package peno.htttp;
  */
 public interface SpectatorHandler extends GameHandler {
 
+	public void playerRolled(String playerID, int playerNumber);
+
 	/**
 	 * Invoked when a player updates its state.
 	 * 
