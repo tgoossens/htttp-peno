@@ -1472,9 +1472,8 @@ public class PlayerClient {
 		// Stop the game
 		stop();
 	}
-	
-	private void gameWon(final int teamNumber) throws IOException {
 
+	private void gameWon(final int teamNumber) throws IOException {
 		// Call handler
 		handlerExecutor.submit(new Runnable() {
 			@Override
@@ -1482,9 +1481,8 @@ public class PlayerClient {
 				handler.gameWon(teamNumber);
 			}
 		});
-		
 		// Stop the game
-		stop();
+		stopped();
 	}
 
 	/*

@@ -207,8 +207,6 @@ public class SpectatorClient {
 						handler.gameWon(teamNumber);
 					}
 				});
-				// Stop the game
-				stop();
 			} else if (topic.equals(Constants.SEESAW_LOCK)) {
 				// Player has locked seesaw
 				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
