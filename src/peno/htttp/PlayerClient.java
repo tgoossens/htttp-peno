@@ -892,6 +892,7 @@ public class PlayerClient {
 	private void publishRolled() throws IOException {
 		Map<String, Object> message = newMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
+		message.put(Constants.OBJECT_NUMBER, getObjectNumber());
 		publish(Constants.ROLLED, message);
 	}
 

@@ -170,10 +170,11 @@ public class SpectatorClient {
 			} else if (topic.equals(Constants.ROLLED)) {
 				// Player rolled their number
 				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				final int objectNumber = ((Number) message.get(Constants.OBJECT_NUMBER)).intValue();
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
-						handler.playerRolled(playerID, playerNumber);
+						handler.playerRolled(playerID, playerNumber, objectNumber);
 					}
 				});
 			} else if (topic.equals(Constants.UPDATE)) {
