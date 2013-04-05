@@ -1472,6 +1472,20 @@ public class PlayerClient {
 		// Stop the game
 		stop();
 	}
+	
+	private void gameWon(final int teamNumber) throws IOException {
+
+		// Call handler
+		handlerExecutor.submit(new Runnable() {
+			@Override
+			public void run() {
+				handler.gameWon(teamNumber);
+			}
+		});
+		
+		// Stop the game
+		stop();
+	}
 
 	/*
 	 * Setup/shutdown
@@ -1802,6 +1816,10 @@ public class PlayerClient {
 				double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
 				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
 				updateReceived(playerID, x, y, angle);
+			} else if (topic.equals(Constants.WIN)) {
+				// Team won
+				int teamNumber = ((Number) message.get(Constants.TEAM_NUMBER)).intValue();
+				gameWon(teamNumber);
 			}
 
 		}
