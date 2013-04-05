@@ -198,6 +198,17 @@ public class SpectatorClient {
 						handler.playerFoundObject(playerID, playerNumber);
 					}
 				});
+			} else if (topic.equals(Constants.WIN)) {
+				// Team has won
+				final int teamNumber = ((Number) message.get(Constants.TEAM_NUMBER)).intValue();
+				handlerExecutor.submit(new Runnable() {
+					@Override
+					public void run() {
+						handler.gameWon(teamNumber);
+					}
+				});
+				// Stop the game
+				stop();
 			} else if (topic.equals(Constants.SEESAW_LOCK)) {
 				// Player has locked seesaw
 				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
