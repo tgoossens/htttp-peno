@@ -11,6 +11,7 @@ public interface Constants {
 	public static final String PLAYER_ID = "playerID";
 	public static final String CLIENT_ID = "clientID";
 	public static final String PLAYER_NUMBER = "playerNumber";
+	public static final String OBJECT_NUMBER = "objectNumber";
 	public static final String TEAM_NUMBER = "teamNumber";
 
 	/*
