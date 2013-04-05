@@ -15,8 +15,9 @@ public interface SpectatorHandler extends GameHandler {
 	 * 
 	 * @param playerID
 	 * @param playerNumber
+	 * @param objectNumber 
 	 */
-	public void playerRolled(String playerID, int playerNumber);
+	public void playerRolled(String playerID, int playerNumber, int objectNumber);
 
 	/**
 	 * Invoked when a player updates its state.
