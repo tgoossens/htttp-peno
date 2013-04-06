@@ -62,13 +62,9 @@ public class PlayerClient {
 	private static final ThreadFactory handlerFactory = new NamedThreadFactory("HTTTP-PlayerHandler-%d");
 
 	/*
-	 * Team communication
+	 * Persistent
 	 */
-	private String teamPartner = null;
-
-	/*
-	 * Identifiers
-	 */
+	private final PlayerDetails localPlayerDetails;
 	private final String gameID;
 
 	/*
@@ -92,6 +88,10 @@ public class PlayerClient {
 	private static final ThreadFactory heartbeatFactory = new NamedThreadFactory("HTTTP-HeartBeat-%d");
 
 	/*
+	 * Team communication
+	 */
+	private String teamPartner = null;
+	/*
 	 * Seesaw
 	 */
 	private int seesawLock = 0;
@@ -105,18 +105,19 @@ public class PlayerClient {
 	 *            The event handler which listens to this client.
 	 * @param gameID
 	 *            The game identifier.
-	 * @param playerID
-	 *            The local player identifier.
+	 * @param playerDetails
+	 *            The local player's details.
 	 * @throws IOException
 	 */
-	public PlayerClient(Connection connection, PlayerHandler handler, String gameID, String playerID)
+	public PlayerClient(Connection connection, PlayerHandler handler, String gameID, PlayerDetails playerDetails)
 			throws IOException {
 		this.connection = connection;
 		this.handler = handler;
 		this.gameID = gameID;
+		this.localPlayerDetails = playerDetails;
 
 		String clientID = UUID.randomUUID().toString();
-		this.localPlayer = new PlayerState(clientID, playerID);
+		this.localPlayer = new PlayerState(clientID, playerDetails.getPlayerID());
 
 		this.handlerExecutor = Executors.newCachedThreadPool(handlerFactory);
 	}
@@ -219,6 +220,14 @@ public class PlayerClient {
 		return getNbPlayers() >= nbPlayers;
 	}
 
+	private PlayerState getLocalPlayer() {
+		return localPlayer;
+	}
+
+	private PlayerDetails getLocalPlayerDetails() {
+		return localPlayerDetails;
+	}
+
 	private boolean hasPlayer(String clientID, String playerID) {
 		synchronized (players) {
 			return players.isConfirmed(clientID, playerID);
@@ -229,10 +238,6 @@ public class PlayerClient {
 		synchronized (players) {
 			return players.getConfirmed(playerID);
 		}
-	}
-
-	private PlayerState getLocalPlayer() {
-		return localPlayer;
 	}
 
 	private PlayerState confirmPlayer(String clientID, String playerID, boolean isReady) {
@@ -890,7 +895,7 @@ public class PlayerClient {
 	}
 
 	private void publishRolled() throws IOException {
-		Map<String, Object> message = newMessage();
+		Map<String, Object> message = newSpectatorMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
 		publish(Constants.ROLLED, message);
 	}
@@ -933,12 +938,12 @@ public class PlayerClient {
 			throw new IllegalStateException("Cannot update position when not playing.");
 		}
 
-		Map<String, Object> message = newMessage();
+		Map<String, Object> message = newSpectatorMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
 		message.put(Constants.UPDATE_X, x);
 		message.put(Constants.UPDATE_Y, y);
 		message.put(Constants.UPDATE_ANGLE, angle);
-		message.put(Constants.UPDATE_FOUND_OBJECT, hasFoundObject());
+		message.put(Constants.PLAYER_FOUND_OBJECT, hasFoundObject());
 		publish(Constants.UPDATE, message);
 	}
 
@@ -994,7 +999,7 @@ public class PlayerClient {
 		seesawLock = 0;
 
 		// Publish unlock
-		Map<String, Object> message = newMessage();
+		Map<String, Object> message = newSpectatorMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
 		message.put(Constants.SEESAW_BARCODE, unlockedBarcode);
 		publish(Constants.SEESAW_UNLOCK, message);
@@ -1048,7 +1053,7 @@ public class PlayerClient {
 		seesawLock = barcode;
 
 		// Publish lock
-		final Map<String, Object> message = newMessage();
+		final Map<String, Object> message = newSpectatorMessage();
 		message.put(Constants.PLAYER_NUMBER, getPlayerNumber());
 		message.put(Constants.SEESAW_BARCODE, barcode);
 		publish(Constants.SEESAW_LOCK, message);
@@ -1629,6 +1634,15 @@ public class PlayerClient {
 
 		// Add player ID to message
 		message.put(Constants.PLAYER_ID, getPlayerID());
+
+		return message;
+	}
+
+	protected Map<String, Object> newSpectatorMessage() {
+		Map<String, Object> message = newMessage();
+
+		// Add player details to message
+		message.put(Constants.PLAYER_DETAILS, getLocalPlayerDetails().write());
 
 		return message;
 	}

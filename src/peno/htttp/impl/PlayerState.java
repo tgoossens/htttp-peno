@@ -3,6 +3,8 @@ package peno.htttp.impl;
 import java.util.HashMap;
 import java.util.Map;
 
+import peno.htttp.Constants;
+
 public class PlayerState {
 
 	private final String clientID;
@@ -74,15 +76,15 @@ public class PlayerState {
 	}
 
 	public void read(Map<String, Object> in) {
-		setFoundObject((Boolean) in.get("hasFoundObject"));
-		setTeamNumber(((Number) in.get("teamNumber")).intValue());
+		setFoundObject((Boolean) in.get(Constants.PLAYER_FOUND_OBJECT));
+		setTeamNumber(((Number) in.get(Constants.TEAM_NUMBER)).intValue());
 	}
 
 	public Map<String, Object> write() {
 		Map<String, Object> out = new HashMap<String, Object>();
-		out.put("playerID", getPlayerID());
-		out.put("hasFoundObject", hasFoundObject());
-		out.put("teamNumber", getTeamNumber());
+		out.put(Constants.PLAYER_ID, getPlayerID());
+		out.put(Constants.PLAYER_FOUND_OBJECT, hasFoundObject());
+		out.put(Constants.TEAM_NUMBER, getTeamNumber());
 		return out;
 	}
 
