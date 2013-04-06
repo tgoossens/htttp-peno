@@ -107,7 +107,13 @@ public class SpectatorClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
+			// Player messages
 			final String playerID = (String) message.get(Constants.PLAYER_ID);
+			// Spectator messages
+			@SuppressWarnings("unchecked")
+			final PlayerDetails player = PlayerDetails
+					.read((Map<String, Object>) message.get(Constants.PLAYER_DETAILS));
+
 			if (topic.equals(Constants.START)) {
 				// Game started
 				handlerExecutor.submit(new Runnable() {
@@ -173,7 +179,7 @@ public class SpectatorClient {
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
-						handler.playerRolled(playerID, playerNumber);
+						handler.playerRolled(player, playerNumber);
 					}
 				});
 			} else if (topic.equals(Constants.UPDATE)) {
@@ -182,11 +188,11 @@ public class SpectatorClient {
 				final double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
 				final double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
 				final double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
-				final boolean foundObject = (Boolean) message.get(Constants.UPDATE_FOUND_OBJECT);
+				final boolean foundObject = (Boolean) message.get(Constants.PLAYER_FOUND_OBJECT);
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
-						handler.playerUpdate(playerID, playerNumber, x, y, angle, foundObject);
+						handler.playerUpdate(player, playerNumber, x, y, angle, foundObject);
 					}
 				});
 			} else if (topic.equals(Constants.FOUND_OBJECT)) {
@@ -209,8 +215,8 @@ public class SpectatorClient {
 				});
 			} else if (topic.equals(Constants.SEESAW_LOCK)) {
 				// Player has locked seesaw
-				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				final int barcode = ((Number) message.get("barcode")).intValue();
+				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				final int barcode = ((Number) message.get(Constants.SEESAW_BARCODE)).intValue();
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
@@ -219,8 +225,8 @@ public class SpectatorClient {
 				});
 			} else if (topic.equals(Constants.SEESAW_UNLOCK)) {
 				// Player has unlocked seesaw
-				final int playerNumber = ((Number) message.get("playerNumber")).intValue();
-				final int barcode = ((Number) message.get("barcode")).intValue();
+				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
+				final int barcode = ((Number) message.get(Constants.SEESAW_BARCODE)).intValue();
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
