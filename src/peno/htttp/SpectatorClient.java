@@ -185,8 +185,8 @@ public class SpectatorClient {
 			} else if (topic.equals(Constants.UPDATE)) {
 				// Player updated their state
 				final int playerNumber = ((Number) message.get(Constants.PLAYER_NUMBER)).intValue();
-				final double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
-				final double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+				final long x = ((Number) message.get(Constants.UPDATE_X)).longValue();
+				final long y = ((Number) message.get(Constants.UPDATE_Y)).longValue();
 				final double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
 				final boolean foundObject = (Boolean) message.get(Constants.PLAYER_FOUND_OBJECT);
 				handlerExecutor.submit(new Runnable() {
