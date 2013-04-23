@@ -35,7 +35,7 @@ public interface PlayerHandler extends GameHandler {
 	 * @param angle
 	 *            The angle of the partner's orientation.
 	 */
-	public void teamPosition(double x, double y, double angle);
+	public void teamPosition(long x, long y, double angle);
 
 	/**
 	 * Invoked when maze tiles have been received from the team partner.

@@ -933,7 +933,7 @@ public class PlayerClient {
 	 *             If not playing.
 	 * @throws IOException
 	 */
-	public void updatePosition(double x, double y, double angle) throws IllegalStateException, IOException {
+	public void updatePosition(long x, long y, double angle) throws IllegalStateException, IOException {
 		if (!isPlaying()) {
 			throw new IllegalStateException("Cannot update position when not playing.");
 		}
@@ -950,7 +950,7 @@ public class PlayerClient {
 	/**
 	 * Invoked when a position update is received.
 	 */
-	private void updateReceived(String playerID, final double x, final double y, final double angle) {
+	private void updateReceived(String playerID, final long x, final long y, final double angle) {
 		if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
 			handlerExecutor.submit(new Runnable() {
 				@Override
@@ -1824,8 +1824,8 @@ public class PlayerClient {
 				heartbeatReceived(playerID);
 			} else if (topic.equals(Constants.UPDATE)) {
 				// Player updated their position
-				double x = ((Number) message.get(Constants.UPDATE_X)).doubleValue();
-				double y = ((Number) message.get(Constants.UPDATE_Y)).doubleValue();
+				long x = ((Number) message.get(Constants.UPDATE_X)).longValue();
+				long y = ((Number) message.get(Constants.UPDATE_Y)).longValue();
 				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
 				updateReceived(playerID, x, y, angle);
 			} else if (topic.equals(Constants.WIN)) {
