@@ -369,9 +369,6 @@ public class PlayerClient {
 				return false;
 			return true;
 		case PLAYING:
-			// Nobody can join while playing
-			return false;
-		case PAUSED:
 			// Only missing players can join
 			return isMissingPlayer(playerID);
 		default:
@@ -386,10 +383,6 @@ public class PlayerClient {
 		tryRoll();
 		// Trigger handlers for previously found objects
 		triggerFoundObjects();
-		// Rejoin team
-		if (hasTeamNumber()) {
-			joinTeam(getTeamNumber());
-		}
 	}
 
 	private void playerJoining(String clientID, final String playerID, BasicProperties props) throws IOException {
@@ -511,12 +504,9 @@ public class PlayerClient {
 			clearPlayerNumbers();
 			break;
 		case PLAYING:
-		case PAUSED:
 			if (hasPlayer(clientID, playerID)) {
 				// Player went missing
 				setMissingPlayer(getPlayer(playerID));
-				// Paused
-				paused();
 			}
 			break;
 		default:
@@ -544,19 +534,11 @@ public class PlayerClient {
 	}
 
 	/**
-	 * Check whether the game is currently paused.
-	 */
-	public boolean isPaused() {
-		return getGameState() == GameState.PAUSED;
-	}
-
-	/**
 	 * Check if the game can be started.
 	 */
 	public boolean canStart() {
 		switch (getGameState()) {
 		case STARTING:
-		case PAUSED:
 			// Game must be full
 			if (!isFull())
 				return false;
@@ -597,6 +579,8 @@ public class PlayerClient {
 			Map<String, Object> message = newMessage();
 			message.put(Constants.IS_READY, isReady);
 			publish(Constants.READY, message);
+
+			// TODO Start game if others are already playing
 		}
 	}
 
@@ -711,51 +695,6 @@ public class PlayerClient {
 		});
 	}
 
-	/**
-	 * Pause the game.
-	 * 
-	 * <p>
-	 * Call {@link #setReady(boolean)} when ready again to continue the game.
-	 * </p>
-	 * 
-	 * @throws IllegalStateException
-	 *             If not joined in the game, or if not playing.
-	 * @throws IOException
-	 */
-	public void pause() throws IOException, IllegalStateException {
-		if (!isJoined()) {
-			throw new IllegalStateException("Not joined in the game.");
-		}
-		if (!isPlaying()) {
-			throw new IllegalStateException("Can only pause while playing.");
-		}
-		if (isPaused()) {
-			// Game already paused
-			return;
-		}
-
-		// Publish
-		publish("pause", null);
-
-		// Set as not ready
-		setReady(false);
-	}
-
-	private synchronized void paused() {
-		if (isPaused())
-			return;
-
-		// Update game state
-		setGameState(GameState.PAUSED);
-		// Call handler
-		handlerExecutor.submit(new Runnable() {
-			@Override
-			public void run() {
-				handler.gamePaused();
-			}
-		});
-	}
-
 	/*
 	 * Player number rolling
 	 */
@@ -778,7 +717,6 @@ public class PlayerClient {
 	 */
 	public boolean hasPlayerNumber() {
 		switch (getGameState()) {
-		case PAUSED:
 		case PLAYING:
 		case STARTING:
 			return (playerNumbers.size() == nbPlayers);
@@ -1813,9 +1751,6 @@ public class PlayerClient {
 			} else if (topic.equals(Constants.STOP)) {
 				// Game stopped
 				stopped();
-			} else if (topic.equals(Constants.PAUSE)) {
-				// Game paused
-				paused();
 			} else if (topic.equals(Constants.FOUND_OBJECT)) {
 				// Player found their object
 				playerFoundObject(playerID);

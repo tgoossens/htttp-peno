@@ -130,14 +130,6 @@ public class SpectatorClient {
 						handler.gameStopped();
 					}
 				});
-			} else if (topic.equals(Constants.PAUSE)) {
-				// Game paused
-				handlerExecutor.submit(new Runnable() {
-					@Override
-					public void run() {
-						handler.gamePaused();
-					}
-				});
 			} else if (topic.equals(Constants.JOIN)) {
 				// Player joining
 				handlerExecutor.submit(new Runnable() {
