@@ -10,7 +10,17 @@ public interface Constants {
 	 */
 	public static final String PLAYER_ID = "playerID";
 	public static final String CLIENT_ID = "clientID";
+
+	/*
+	 * Player details
+	 */
+	public static final String PLAYER_DETAILS = "playerDetails";
 	public static final String PLAYER_NUMBER = "playerNumber";
+	public static final String PLAYER_TYPE = "playerType";
+	public static final String PLAYER_WIDTH = "width";
+	public static final String PLAYER_HEIGHT = "height";
+	public static final String PLAYER_FOUND_OBJECT = "foundObject";
+
 	public static final String TEAM_NUMBER = "teamNumber";
 
 	/*
@@ -72,7 +82,6 @@ public interface Constants {
 	public static final String UPDATE_X = "x";
 	public static final String UPDATE_Y = "y";
 	public static final String UPDATE_ANGLE = "angle";
-	public static final String UPDATE_FOUND_OBJECT = "foundObject";
 
 	/*
 	 * Team
