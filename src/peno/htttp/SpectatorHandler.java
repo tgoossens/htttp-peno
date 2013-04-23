@@ -49,7 +49,7 @@ public interface SpectatorHandler extends GameHandler {
 	 * @param foundObject
 	 *            True if the player has found their object.
 	 */
-	public void playerUpdate(PlayerDetails playerDetails, int playerNumber, double x, double y, double angle,
+	public void playerUpdate(PlayerDetails playerDetails, int playerNumber, long x, long y, double angle,
 			boolean foundObject);
 
 	/**
