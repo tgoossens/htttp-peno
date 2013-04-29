@@ -3,13 +3,15 @@ package peno.htttp.impl;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class PlayerRegister {
 
 	private final Map<String, PlayerState> confirmed = new HashMap<String, PlayerState>();
 	private final Map<String, Map<String, PlayerState>> voted = new HashMap<String, Map<String, PlayerState>>();
-	private final Map<String, PlayerState> missing = new HashMap<String, PlayerState>();
+	private final Set<String> missing = new HashSet<String>();
 
 	/**
 	 * Confirm a client's player and add it to the registry.
@@ -192,17 +194,7 @@ public class PlayerRegister {
 	 *            The player identifier.
 	 */
 	public boolean isMissing(String playerID) {
-		return missing.containsKey(playerID);
-	}
-
-	/**
-	 * Get the missing player with the given player identifier, if any.
-	 * 
-	 * @param playerID
-	 *            The player identifier.
-	 */
-	public PlayerState getMissing(String playerID) {
-		return missing.get(playerID);
+		return missing.contains(playerID);
 	}
 
 	/**
@@ -215,8 +207,8 @@ public class PlayerRegister {
 	/**
 	 * Get a set of all currently missing players.
 	 */
-	public Collection<PlayerState> getMissing() {
-		return Collections.unmodifiableCollection(missing.values());
+	public Collection<String> getMissing() {
+		return Collections.unmodifiableCollection(missing);
 	}
 
 	/**
@@ -229,13 +221,13 @@ public class PlayerRegister {
 	/**
 	 * Mark the given player as missing.
 	 * 
-	 * @param player
-	 *            The player.
+	 * @param playerID
+	 *            The player identifier.
 	 */
-	public void setMissing(PlayerState player) {
-		confirmed.remove(player.getPlayerID());
-		voted.remove(player.getPlayerID());
-		missing.put(player.getPlayerID(), player);
+	public void setMissing(String playerID) {
+		confirmed.remove(playerID);
+		voted.remove(playerID);
+		missing.add(playerID);
 	}
 
 	/**

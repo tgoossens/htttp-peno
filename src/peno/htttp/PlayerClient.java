@@ -73,6 +73,7 @@ public class PlayerClient {
 	private volatile GameState gameState = GameState.DISCONNECTED;
 	private final PlayerState localPlayer;
 	private final PlayerRegister players = new PlayerRegister();
+	private boolean hasFoundObject = false;
 
 	/*
 	 * Rolls
@@ -90,7 +91,9 @@ public class PlayerClient {
 	/*
 	 * Team communication
 	 */
+	private int teamNumber = -1;
 	private String teamPartner = null;
+
 	/*
 	 * Seesaw
 	 */
@@ -248,8 +251,6 @@ public class PlayerClient {
 				// Not previously voted for player, create new
 				player = new PlayerState(clientID, playerID);
 			}
-			// Restore from missing
-			restorePlayer(player);
 			// Confirm and set ready
 			players.confirm(player);
 			player.setReady(isReady);
@@ -261,8 +262,6 @@ public class PlayerClient {
 		synchronized (players) {
 			// Create player
 			PlayerState player = new PlayerState(clientID, playerID);
-			// Restore from missing
-			restorePlayer(player);
 			// Vote
 			players.vote(player);
 			return player;
@@ -276,28 +275,19 @@ public class PlayerClient {
 		}
 	}
 
-	private void restorePlayer(PlayerState player) {
-		synchronized (players) {
-			PlayerState missingPlayer = players.getMissing(player.getPlayerID());
-			if (missingPlayer != null) {
-				missingPlayer.copyTo(player);
-			}
-		}
-	}
-
 	private boolean isMissingPlayer(String playerID) {
 		synchronized (players) {
 			return players.isMissing(playerID);
 		}
 	}
 
-	private Collection<PlayerState> getMissingPlayers() {
+	private Collection<String> getMissingPlayers() {
 		synchronized (players) {
 			return players.getMissing();
 		}
 	}
 
-	private void setMissingPlayer(PlayerState missingPlayer) {
+	private void setMissingPlayer(String missingPlayer) {
 		synchronized (players) {
 			if (missingPlayer != null) {
 				players.setMissing(missingPlayer);
@@ -381,8 +371,6 @@ public class PlayerClient {
 		setupPublic();
 		// Try to roll
 		tryRoll();
-		// Trigger handlers for previously found objects
-		triggerFoundObjects();
 	}
 
 	private void playerJoining(String clientID, final String playerID, BasicProperties props) throws IOException {
@@ -404,7 +392,6 @@ public class PlayerClient {
 			reply.put(Constants.CLIENT_ID, player.getClientID());
 			reply.put(Constants.IS_READY, player.isReady());
 			reply.put(Constants.IS_JOINED, isJoined());
-			reply.putAll(player.write());
 			// Report game state
 			reply.putAll(gameState);
 		}
@@ -505,21 +492,32 @@ public class PlayerClient {
 			break;
 		case PLAYING:
 			if (hasPlayer(clientID, playerID)) {
+				// Reset player state
+				getPlayer(playerID).reset();
 				// Player went missing
-				setMissingPlayer(getPlayer(playerID));
+				setMissingPlayer(playerID);
 			}
 			break;
 		default:
 			break;
 		}
 
-		// Call handler
+		// Call disconnect handler
 		handlerExecutor.submit(new Runnable() {
 			@Override
 			public void run() {
 				handler.playerDisconnected(playerID, reason);
 			}
 		});
+		// Call team disconnect handler if lost partner
+		if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
+			handlerExecutor.submit(new Runnable() {
+				@Override
+				public void run() {
+					handler.teamDisconnected(playerID);
+				}
+			});
+		}
 	}
 
 	/*
@@ -580,7 +578,10 @@ public class PlayerClient {
 			message.put(Constants.IS_READY, isReady);
 			publish(Constants.READY, message);
 
-			// TODO Start game if others are already playing
+			// Start game if others are already playing
+			if (isPlaying()) {
+				started(true);
+			}
 		}
 	}
 
@@ -598,9 +599,6 @@ public class PlayerClient {
 		if (isReady) {
 			// Try to start
 			tryStart();
-		} else {
-			// TODO Should we pause here when playing?
-			// Related: should we replace pause() with setReady(false)?
 		}
 	}
 
@@ -636,8 +634,8 @@ public class PlayerClient {
 		}
 	}
 
-	private synchronized void started() {
-		if (isPlaying())
+	private synchronized void started(boolean force) {
+		if (!force && isPlaying())
 			return;
 
 		// Update game state
@@ -672,8 +670,8 @@ public class PlayerClient {
 		publish(Constants.STOP, null);
 	}
 
-	private synchronized void stopped() throws IOException {
-		if (!isPlaying())
+	private synchronized void stopped(boolean force) throws IOException {
+		if (!force && !isPlaying())
 			return;
 
 		// Update game state
@@ -889,6 +887,7 @@ public class PlayerClient {
 	 * Invoked when a position update is received.
 	 */
 	private void updateReceived(String playerID, final long x, final long y, final double angle) {
+		// Update received from partner
 		if (hasTeamPartner() && getTeamPartner().equals(playerID)) {
 			handlerExecutor.submit(new Runnable() {
 				@Override
@@ -1025,27 +1024,7 @@ public class PlayerClient {
 	 * Check whether the local player has found their object.
 	 */
 	public boolean hasFoundObject() {
-		return getLocalPlayer().hasFoundObject();
-	}
-
-	private void triggerFoundObjects() throws IOException {
-		if (!hasPlayerNumber())
-			return;
-
-		// Trigger handlers for currently connected players
-		// This includes the local player
-		for (PlayerState player : players.getConfirmed()) {
-			if (player.hasFoundObject()) {
-				final String playerID = player.getPlayerID();
-				final int playerNumber = playerNumbers.get(playerID);
-				handlerExecutor.submit(new Runnable() {
-					@Override
-					public void run() {
-						handler.playerFoundObject(playerID, playerNumber);
-					}
-				});
-			}
-		}
+		return hasFoundObject;
 	}
 
 	/**
@@ -1065,7 +1044,7 @@ public class PlayerClient {
 		}
 
 		// Mark own object as found
-		getLocalPlayer().setFoundObject(true);
+		this.hasFoundObject = true;
 
 		// Publish
 		Map<String, Object> message = newMessage();
@@ -1074,9 +1053,6 @@ public class PlayerClient {
 	}
 
 	private void playerFoundObject(final String playerID) {
-		// Mark object as found
-		getPlayer(playerID).setFoundObject(true);
-
 		// Call handler
 		final int playerNumber = playerNumbers.get(playerID);
 		handlerExecutor.submit(new Runnable() {
@@ -1193,14 +1169,14 @@ public class PlayerClient {
 			throw new IllegalStateException("Not in any team yet.");
 		}
 
-		return getLocalPlayer().getTeamNumber();
+		return teamNumber;
 	}
 
 	/**
 	 * Check if the local player is in a team yet.
 	 */
 	public boolean hasTeamNumber() {
-		return getLocalPlayer().getTeamNumber() >= 0;
+		return teamNumber >= 0;
 	}
 
 	/**
@@ -1233,6 +1209,8 @@ public class PlayerClient {
 	 *            The team number.
 	 * @throws IllegalStateException
 	 *             If not playing or already in a team.
+	 * @throws IllegalArgumentException
+	 *             If team number is negative.
 	 * @throws IOException
 	 */
 	public void joinTeam(int teamNumber) throws IllegalStateException, IOException {
@@ -1242,17 +1220,15 @@ public class PlayerClient {
 		if (hasTeamNumber()) {
 			throw new IllegalStateException("Already joined a team.");
 		}
+		if (teamNumber < 0) {
+			throw new IllegalArgumentException("Invalid team number.");
+		}
 
 		// Set team number
-		getLocalPlayer().setTeamNumber(teamNumber);
+		this.teamNumber = teamNumber;
 
 		// Start listening
-		setupTeam(getTeamNumber());
-
-		/*
-		 * TODO Publish team number for others to store it in case this player
-		 * loses their connection and rejoins.
-		 */
+		setupTeam(teamNumber);
 
 		// Ping for partner
 		new TeamPingRequester(channel, requestProvider).request(requestLifetime);
@@ -1425,7 +1401,7 @@ public class PlayerClient {
 			}
 		});
 		// Stop the game
-		stopped();
+		stopped(false);
 	}
 
 	/*
@@ -1508,19 +1484,11 @@ public class PlayerClient {
 
 		// Missing players (if valid)
 		@SuppressWarnings("unchecked")
-		Iterable<Map<String, Object>> missingPlayers = (Iterable<Map<String, Object>>) message
-				.get(Constants.MISSING_PLAYERS);
+		Iterable<String> missingPlayers = (Iterable<String>) message.get(Constants.MISSING_PLAYERS);
 		if (missingPlayers != null) {
-			for (Map<String, Object> playerData : missingPlayers) {
-				// Create missing player
-				String playerID = (String) playerData.get(Constants.PLAYER_ID);
-				PlayerState missingPlayer = new PlayerState(null, playerID);
-				missingPlayer.read(playerData);
-				// Store as missing player
+			for (String missingPlayer : missingPlayers) {
 				setMissingPlayer(missingPlayer);
 			}
-			// Try to restore from missing local player
-			restorePlayer(getLocalPlayer());
 		}
 	}
 
@@ -1531,17 +1499,14 @@ public class PlayerClient {
 			state.put(Constants.GAME_STATE, getGameState().name());
 		}
 		// Player numbers
+		System.out.println("hasPlayerNumber:" + hasPlayerNumber());
 		if (hasPlayerNumber()) {
 			state.put(Constants.PLAYER_NUMBERS, playerNumbers);
 		}
 		// Missing players
-		Collection<PlayerState> missingPlayers = getMissingPlayers();
+		Collection<String> missingPlayers = getMissingPlayers();
 		if (!missingPlayers.isEmpty()) {
-			List<Map<String, Object>> out = new ArrayList<Map<String, Object>>(missingPlayers.size());
-			for (PlayerState missingPlayer : missingPlayers) {
-				out.add(missingPlayer.write());
-			}
-			state.put(Constants.MISSING_PLAYERS, out);
+			state.put(Constants.MISSING_PLAYERS, missingPlayers);
 		}
 		return state;
 	}
@@ -1628,14 +1593,11 @@ public class PlayerClient {
 			boolean isJoined = (Boolean) message.get(Constants.IS_JOINED);
 
 			// Store player
-			PlayerState player;
 			if (isJoined) {
-				player = confirmPlayer(clientID, playerID, isReady);
+				confirmPlayer(clientID, playerID, isReady);
 			} else {
-				player = votePlayer(clientID, playerID);
+				votePlayer(clientID, playerID);
 			}
-			// Read player state
-			player.read(message);
 			// Read game state
 			readGameState(message);
 		}
@@ -1747,10 +1709,10 @@ public class PlayerClient {
 				playerReady(playerID, isReady);
 			} else if (topic.equals(Constants.START)) {
 				// Game started
-				started();
+				started(false);
 			} else if (topic.equals(Constants.STOP)) {
 				// Game stopped
-				stopped();
+				stopped(false);
 			} else if (topic.equals(Constants.FOUND_OBJECT)) {
 				// Player found their object
 				playerFoundObject(playerID);
