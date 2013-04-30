@@ -587,7 +587,10 @@ public class PlayerClient {
 
 	private void playerReady(final String playerID, final boolean isReady) throws IOException {
 		// Set ready state
-		getPlayer(playerID).setReady(isReady);
+		PlayerState player = getPlayer(playerID);
+		if (player != null) {
+			player.setReady(isReady);
+		}
 		// Call handler
 		handlerExecutor.submit(new Runnable() {
 			@Override
@@ -667,7 +670,9 @@ public class PlayerClient {
 		}
 
 		// Publish
-		publish(Constants.STOP, null);
+		if (channel.isOpen()) {
+			publish(Constants.STOP, null);
+		}
 	}
 
 	private synchronized void stopped(boolean force) throws IOException {
@@ -1429,6 +1434,7 @@ public class PlayerClient {
 	private void shutdownJoin() {
 		if (joinConsumer != null) {
 			joinConsumer.terminate();
+			joinConsumer = null;
 		}
 	}
 
@@ -1440,6 +1446,7 @@ public class PlayerClient {
 	private void shutdownPublic() throws IOException {
 		if (publicConsumer != null) {
 			publicConsumer.terminate();
+			publicConsumer = null;
 		}
 	}
 
@@ -1451,6 +1458,7 @@ public class PlayerClient {
 	private void shutdownTeam() throws IOException {
 		if (teamConsumer != null) {
 			teamConsumer.terminate();
+			teamConsumer = null;
 		}
 	}
 
@@ -1499,7 +1507,6 @@ public class PlayerClient {
 			state.put(Constants.GAME_STATE, getGameState().name());
 		}
 		// Player numbers
-		System.out.println("hasPlayerNumber:" + hasPlayerNumber());
 		if (hasPlayerNumber()) {
 			state.put(Constants.PLAYER_NUMBERS, playerNumbers);
 		}
