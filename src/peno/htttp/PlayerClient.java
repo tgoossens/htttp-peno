@@ -1702,7 +1702,13 @@ public class PlayerClient {
 
 		@Override
 		public void handleMessage(String topic, Map<String, Object> message, BasicProperties props) throws IOException {
-			String playerID = (String) message.get(Constants.PLAYER_ID);
+			// Player messages
+			final String playerID = (String) message.get(Constants.PLAYER_ID);
+			// Spectator messages
+			@SuppressWarnings("unchecked")
+			final PlayerDetails player = PlayerDetails
+					.read((Map<String, Object>) message.get(Constants.PLAYER_DETAILS));
+
 			if (topic.equals(Constants.READY)) {
 				// Player ready
 				boolean isReady = (Boolean) message.get(Constants.IS_READY);
@@ -1724,7 +1730,7 @@ public class PlayerClient {
 				long x = ((Number) message.get(Constants.UPDATE_X)).longValue();
 				long y = ((Number) message.get(Constants.UPDATE_Y)).longValue();
 				double angle = ((Number) message.get(Constants.UPDATE_ANGLE)).doubleValue();
-				updateReceived(playerID, x, y, angle);
+				updateReceived(player.getPlayerID(), x, y, angle);
 			} else if (topic.equals(Constants.WIN)) {
 				// Team won
 				int teamNumber = ((Number) message.get(Constants.TEAM_NUMBER)).intValue();
