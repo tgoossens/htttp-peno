@@ -220,7 +220,7 @@ public class SpectatorClient {
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
-						handler.lockedSeesaw(playerID, playerNumber, barcode);
+						handler.lockedSeesaw(player.getPlayerID(), playerNumber, barcode);
 					}
 				});
 			} else if (topic.equals(Constants.SEESAW_UNLOCK)) {
@@ -230,7 +230,7 @@ public class SpectatorClient {
 				handlerExecutor.submit(new Runnable() {
 					@Override
 					public void run() {
-						handler.unlockedSeesaw(playerID, playerNumber, barcode);
+						handler.unlockedSeesaw(player.getPlayerID(), playerNumber, barcode);
 					}
 				});
 			}
