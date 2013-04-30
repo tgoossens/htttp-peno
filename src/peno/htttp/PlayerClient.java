@@ -369,8 +369,18 @@ public class PlayerClient {
 	private void joined() throws IOException {
 		// Setup public queue
 		setupPublic();
-		// Try to roll
-		tryRoll();
+		if (hasPlayerNumber()) {
+			// Already rolled
+			handlerExecutor.submit(new Runnable() {
+				@Override
+				public void run() {
+					handler.gameRolled(getPlayerNumber(), getObjectNumber());
+				}
+			});
+		} else {
+			// Try to roll
+			tryRoll();
+		}
 	}
 
 	private void playerJoining(String clientID, final String playerID, BasicProperties props) throws IOException {
