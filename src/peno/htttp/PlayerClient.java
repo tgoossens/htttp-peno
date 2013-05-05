@@ -79,6 +79,8 @@ public class PlayerClient {
 	 */
 	private final Map<String, Integer> playerNumbers = new HashMap<String, Integer>();
 	private final Map<String, PlayerRoll> playerRolls = new HashMap<String, PlayerRoll>();
+	private boolean fakeOwnRoll;
+	private int fakedRoll;
 
 	/*
 	 * Heart beat
@@ -835,13 +837,34 @@ public class PlayerClient {
 		}
 	}
 
+	/**
+	 * Fake own roll by fixing it to a given number.
+	 * 
+	 * <p>
+	 * <strong>For testing purposes only.</strong> When called, any rolls for
+	 * player numbers always produce the given fixed number.
+	 * </p>
+	 * 
+	 * @param roll
+	 *            The fixed roll.
+	 */
+	public void fakeOwnRoll(int roll) {
+		fakeOwnRoll = true;
+		fakedRoll = roll;
+	}
+
 	private boolean hasRolledOwn() {
 		return playerRolls.containsKey(getPlayerID());
 	}
 
 	private void rollOwn() {
 		// Roll for player number
-		int roll = new Random().nextInt();
+		int roll;
+		if (fakeOwnRoll) {
+			roll = fakedRoll;
+		} else {
+			roll = new Random().nextInt();
+		}
 		// Store own roll
 		playerRolls.put(getPlayerID(), new PlayerRoll(getPlayerID(), roll));
 	}
