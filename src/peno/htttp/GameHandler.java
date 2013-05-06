@@ -20,15 +20,6 @@ public interface GameHandler {
 	public void gameStopped();
 
 	/**
-	 * Invoked when the game has paused.
-	 * 
-	 * <p>
-	 * Players should stop their robot but retain its state.
-	 * </p>
-	 */
-	public void gamePaused();
-
-	/**
 	 * Invoked when the game has been won.
 	 * 
 	 * @param teamNumber

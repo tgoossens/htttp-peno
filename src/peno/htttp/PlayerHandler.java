@@ -26,6 +26,14 @@ public interface PlayerHandler extends GameHandler {
 	public void teamConnected(String partnerID);
 
 	/**
+	 * Invoked when the team partner has disconnected.
+	 * 
+	 * @param partnerID
+	 *            The partner's player identifier.
+	 */
+	public void teamDisconnected(String partnerID);
+
+	/**
 	 * Invoked when the team partner updates their position.
 	 * 
 	 * @param x
